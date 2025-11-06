@@ -934,8 +934,19 @@ export namespace Config {
     }
 
     try {
-      // Write merged config as JSONC (with proper formatting)
-      await Bun.write(filepath, JSON.stringify(merged, null, 2))
+      // Write merged config as JSONC, preserving comments using jsonc-parser
+      {
+        const originalText = originalExists ? await Bun.file(filepath).text() : "";
+        // Compute edits to update the config while preserving comments
+        const edits = require("jsonc-parser").modify(
+          originalText,
+          [],
+          merged,
+          { formattingOptions: { insertSpaces: true, tabSize: 2, eol: "\n" } }
+        );
+        const updatedText = require("jsonc-parser").applyEdits(originalText, edits);
+        await Bun.write(filepath, updatedText);
+      }
 
       // Clean up backup on success
       if (originalExists) {
