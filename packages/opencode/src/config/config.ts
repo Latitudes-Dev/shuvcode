@@ -855,15 +855,111 @@ export namespace Config {
     }),
   )
 
+  export const UpdateError = NamedError.create(
+    "ConfigUpdateError",
+    z.object({
+      message: z.string(),
+      path: z.string().optional(),
+    }),
+  )
+
+  export const ValidationError = NamedError.create(
+    "ConfigValidationError",
+    z.object({
+      message: z.string(),
+      path: z.string(),
+    }),
+  )
+
   export async function get() {
     return state().then((x) => x.config)
   }
 
-  export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
+  export async function update(config: Info, scope: "global" | "project" = "project") {
+    // Determine target filepath based on scope
+    const filepath =
+      scope === "global"
+        ? path.join(Global.Path.config, "opencode.jsonc")
+        : path.join(Instance.directory, "opencode.jsonc")
+
+    // Ensure directory exists for global config
+    if (scope === "global") {
+      await fs.mkdir(Global.Path.config, { recursive: true }).catch((err) => {
+        if (err.code !== "EEXIST") {
+          throw new UpdateError(
+            {
+              message: `Failed to create global config directory: ${err.message}`,
+              path: Global.Path.config,
+            },
+            { cause: err },
+          )
+        }
+      })
+
+      // Check write permissions
+      try {
+        await fs.access(Global.Path.config, fs.constants.W_OK)
+      } catch (err) {
+        throw new UpdateError(
+          {
+            message: `No write permission for global config directory: ${Global.Path.config}`,
+            path: Global.Path.config,
+          },
+          { cause: err },
+        )
+      }
+    }
+
+    // Load existing config and merge
     const existing = await loadFile(filepath)
-    await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
-    await Instance.dispose()
+    const merged = mergeDeep(existing, config)
+
+    // Validate merged config
+    const validation = Info.safeParse(merged)
+    if (!validation.success) {
+      throw new ValidationError(
+        {
+          message: `Invalid config after merge: ${validation.error.message}`,
+          path: filepath,
+        },
+        { cause: validation.error },
+      )
+    }
+
+    // Backup original config for rollback
+    const backupPath = `${filepath}.backup`
+    const originalExists = await Bun.file(filepath).exists()
+    if (originalExists) {
+      await Bun.write(backupPath, await Bun.file(filepath).text())
+    }
+
+    try {
+      // Write merged config as JSONC (with proper formatting)
+      await Bun.write(filepath, JSON.stringify(merged, null, 2))
+
+      // Clean up backup on success
+      if (originalExists) {
+        await fs.unlink(backupPath).catch(() => {})
+      }
+
+      // Dispose instance if project config was updated
+      if (scope === "project") {
+        await Instance.dispose()
+      }
+    } catch (err) {
+      // Rollback on failure
+      if (originalExists) {
+        await Bun.write(filepath, await Bun.file(backupPath).text()).catch(() => {})
+        await fs.unlink(backupPath).catch(() => {})
+      }
+      throw new UpdateError(
+        {
+          message: `Failed to write config: ${err}`,
+          path: filepath,
+        },
+        { cause: err },
+      )
+    }
   }
 
   export async function directories() {
