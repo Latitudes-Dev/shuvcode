@@ -885,15 +885,13 @@ export namespace Config {
     // Ensure directory exists for global config
     if (scope === "global") {
       await fs.mkdir(Global.Path.config, { recursive: true }).catch((err) => {
-        if (err.code !== "EEXIST") {
-          throw new UpdateError(
-            {
-              message: `Failed to create global config directory: ${err.message}`,
-              path: Global.Path.config,
-            },
-            { cause: err },
-          )
-        }
+        throw new UpdateError(
+          {
+            message: `Failed to create global config directory: ${err.message}`,
+            path: Global.Path.config,
+          },
+          { cause: err },
+        )
       })
 
       // Check write permissions
