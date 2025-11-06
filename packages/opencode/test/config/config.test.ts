@@ -414,13 +414,6 @@ test("updates global config and writes to global directory", async () => {
   
   // Mock Global.Path.config to use our temp directory
   const originalGlobalPath = await import("../../src/global")
-  const mockGlobal = {
-    ...originalGlobalPath.Global,
-    Path: {
-      ...originalGlobalPath.Global.Path,
-      config: globalConfigPath,
-    },
-  }
   
   await Instance.provide({
     directory: tmp.path,
