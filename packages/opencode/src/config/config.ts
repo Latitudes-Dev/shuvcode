@@ -949,8 +949,11 @@ export namespace Config {
     } catch (err) {
       // Rollback on failure
       if (originalExists) {
-        await Bun.write(filepath, await Bun.file(backupPath).text()).catch(() => {})
-        await fs.unlink(backupPath).catch(() => {})
+        const backupExists = await Bun.file(backupPath).exists();
+        if (backupExists) {
+          await Bun.write(filepath, await Bun.file(backupPath).text()).catch(() => {})
+          await fs.unlink(backupPath).catch(() => {})
+        }
       }
       throw new UpdateError(
         {
