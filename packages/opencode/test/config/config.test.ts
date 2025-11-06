@@ -528,7 +528,6 @@ test("creates backup and rolls back on write failure", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const originalContent = await Bun.file(path.join(tmp.path, "opencode.jsonc")).text()
       
       // Simulate a write failure by making the directory read-only
       // This is platform-dependent and might not work on all systems
