@@ -7,6 +7,7 @@ import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
+import { constants } from "fs"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
 import { Flag } from "../flag/flag"
@@ -896,7 +897,7 @@ export namespace Config {
 
       // Check write permissions
       try {
-        await fs.access(Global.Path.config, fs.constants.W_OK)
+        await fs.access(Global.Path.config, constants.W_OK)
       } catch (err) {
         throw new UpdateError(
           {
