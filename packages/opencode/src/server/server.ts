@@ -41,7 +41,6 @@ import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { isConfigHotReloadEnabled } from "../config/hot-reload"
-import { TuiEvent } from "@/cli/cmd/tui/event"
 
 const ERRORS = {
   400: {

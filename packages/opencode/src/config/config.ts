@@ -861,6 +861,7 @@ export namespace Config {
     before: Info
     after: Info
     diff: ConfigDiff
+    diffForPublish: ConfigDiff
     filepath: string
   }> {
     const scope = input.scope ?? "project"
