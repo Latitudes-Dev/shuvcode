@@ -6,12 +6,16 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
+import { State } from "../project/state"
 import { Flag } from "../flag/flag"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const state = Instance.state(async () => {
+  const state = State.register(
+    "plugin",
+    () => Instance.directory,
+    async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       // @ts-ignore - fetch type incompatibility
@@ -50,7 +54,17 @@ export namespace Plugin {
       hooks,
       input,
     }
-  })
+  },
+    async (state) => {
+      for (const hook of state.hooks) {
+        if ("cleanup" in hook && typeof hook.cleanup === "function") {
+          await (hook.cleanup as () => Promise<void>)().catch((error: Error) => {
+            log.error("Plugin cleanup failed", { error })
+          })
+        }
+      }
+    },
+  )
 
   export async function trigger<
     Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,

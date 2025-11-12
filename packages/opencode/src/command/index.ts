@@ -1,6 +1,7 @@
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { State } from "../project/state"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import { Bus } from "../bus"
 import { Identifier } from "../id/id"
@@ -36,7 +37,7 @@ export namespace Command {
     })
   export type Info = z.infer<typeof Info>
 
-  const state = Instance.state(async () => {
+  const state = State.register("command", () => Instance.directory, async () => {
     const cfg = await Config.get()
 
     const result: Record<string, Info> = {}

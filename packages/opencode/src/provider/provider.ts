@@ -10,6 +10,7 @@ import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
 import { Instance } from "../project/instance"
+import { State } from "../project/state"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
 
@@ -210,7 +211,7 @@ export namespace Provider {
     },
   }
 
-  const state = Instance.state(async () => {
+  const state = State.register("provider", () => Instance.directory, async () => {
     using _ = log.time("state")
     const config = await Config.get()
     const database = await ModelsDev.get()

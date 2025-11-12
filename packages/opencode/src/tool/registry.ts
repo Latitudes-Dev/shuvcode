@@ -13,6 +13,7 @@ import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { Config } from "../config/config"
+import { State } from "../project/state"
 import path from "path"
 import { type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
@@ -22,7 +23,7 @@ import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 
 export namespace ToolRegistry {
-  export const state = Instance.state(async () => {
+  export const state = State.register("tool-registry", () => Instance.directory, async () => {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("tool/*.{js,ts}")
 
