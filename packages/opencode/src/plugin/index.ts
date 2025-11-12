@@ -16,45 +16,45 @@ export namespace Plugin {
     "plugin",
     () => Instance.directory,
     async () => {
-    const client = createOpencodeClient({
-      baseUrl: "http://localhost:4096",
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
-    })
-    const config = await Config.get()
-    const hooks = []
-    const input: PluginInput = {
-      client,
-      project: Instance.project,
-      worktree: Instance.worktree,
-      directory: Instance.directory,
-      $: Bun.$,
-    }
-    const plugins = [...(config.plugin ?? [])]
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push("opencode-copilot-auth@0.0.5")
-      plugins.push("opencode-anthropic-auth@0.0.2")
-    }
-    for (let plugin of plugins) {
-      log.info("loading plugin", { path: plugin })
-      if (!plugin.startsWith("file://")) {
-        const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
-        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        plugin = await BunProc.install(pkg, version)
+      const client = createOpencodeClient({
+        baseUrl: "http://localhost:4096",
+        // @ts-ignore - fetch type incompatibility
+        fetch: async (...args) => Server.App().fetch(...args),
+      })
+      const config = await Config.get()
+      const hooks = []
+      const input: PluginInput = {
+        client,
+        project: Instance.project,
+        worktree: Instance.worktree,
+        directory: Instance.directory,
+        $: Bun.$,
       }
-      const mod = await import(plugin)
-      for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        const init = await fn(input)
-        hooks.push(init)
+      const plugins = [...(config.plugin ?? [])]
+      if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+        plugins.push("opencode-copilot-auth@0.0.5")
+        plugins.push("opencode-anthropic-auth@0.0.2")
       }
-    }
+      for (let plugin of plugins) {
+        log.info("loading plugin", { path: plugin })
+        if (!plugin.startsWith("file://")) {
+          const lastAtIndex = plugin.lastIndexOf("@")
+          const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+          const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+          plugin = await BunProc.install(pkg, version)
+        }
+        const mod = await import(plugin)
+        for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+          const init = await fn(input)
+          hooks.push(init)
+        }
+      }
 
-    return {
-      hooks,
-      input,
-    }
-  },
+      return {
+        hooks,
+        input,
+      }
+    },
     async (state) => {
       for (const hook of state.hooks) {
         if ("cleanup" in hook && typeof hook.cleanup === "function") {

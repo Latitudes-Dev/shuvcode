@@ -7,16 +7,19 @@ This implementation adds config hot reload and targeted invalidation functionali
 ## November 2025 Debug & Optimize
 
 ### JSONC Writer Root Cause
+
 - Identified two issues inside `packages/opencode/src/config/write.ts`: validation previously used `JSON.parse` (rejecting JSONC comments) and incremental edits were applied using stale offsets, producing corrupt JSON before validation.
 - Replaced the validation step with `jsonc-parser`'s APIs and now regenerate the updated document in-place rather than replaying edits captured against mutated content (lines `14-96`).
 - Expanded `packages/opencode/test/config/write.test.ts` with regression cases that cover both comment preservation and multi-key incremental edits so the fallback writer is no longer hit during normal operation.
 
 ### Targeted State Invalidation
+
 - Refactored `packages/opencode/src/config/invalidation.ts` to expose `ConfigInvalidation.apply()` (lines `11-182`). The new helper centralizes the invalidation plan, emits per-section `targets`, and drops the previous `forcedGlobal` behavior that caused every global change to flush MCP/LSP/Plugin state.
 - `Bus.subscribe` now calls `apply` directly, so we can unit-test the invalidation matrix without going through the HTTP stack.
 - The new regression test `theme-only global updates avoid unrelated invalidations` in `packages/opencode/test/config/hot-reload.test.ts` invokes `ConfigInvalidation.apply` with a synthetic diff and asserts that only the `theme` state is touched.
 
 ### Performance & Log Evidence
+
 - Prior to the fix, a theme-only change produced four subsystem invalidations (`provider`, `mcp`, `lsp`, `plugin`) plus tool-registry churn, as shown in the 2025-11-12 logs in this document.
 - After the refactor, the same scenario logs a single target:
 
@@ -33,10 +36,12 @@ INFO  service=config.invalidation scope=global directory=/tmp/theme-only-oMAT6r 
 ### Phase 0: State System Enhancements
 
 **Files Modified:**
+
 - `packages/opencode/src/project/state.ts` - Added `State.register()` and `State.invalidate()` APIs with string-based named state tracking
 - `packages/opencode/src/project/instance.ts` - Added `Instance.invalidate()` and `Instance.forEach()` helper methods
 
 **Key Features:**
+
 - String-based state invalidation instead of function reference tracking
 - Pattern matching support (e.g., `State.invalidate("provider:*")`)
 - Lazy registration that works with Instance contexts
@@ -44,11 +49,13 @@ INFO  service=config.invalidation scope=global directory=/tmp/theme-only-oMAT6r 
 ### Phase 1: File Operations
 
 **Files Created:**
+
 - `packages/opencode/src/config/lock.ts` - File locking mechanism with timeout support
 - `packages/opencode/src/config/backup.ts` - Backup/restore utilities for safe config updates
 - `packages/opencode/src/config/write.ts` - JSONC writing with comment preservation using `jsonc-parser`
 
 **Key Features:**
+
 - Concurrent write protection via file locks
 - Automatic backup creation before modifications
 - JSONC comment preservation with fallback to full rewrite
@@ -56,14 +63,17 @@ INFO  service=config.invalidation scope=global directory=/tmp/theme-only-oMAT6r 
 ### Phase 2: Config Persistence
 
 **Files Created:**
+
 - `packages/opencode/src/config/error.ts` - Typed error definitions (ConfigUpdateError, ConfigValidationError, etc.)
 - `packages/opencode/src/config/diff.ts` - Diff computation algorithm for detecting config changes
 - `packages/opencode/src/config/persist.ts` - Complete config persistence implementation
 
 **Files Modified:**
+
 - `packages/opencode/src/config/config.ts` - Rewrote `Config.update()` to use new persistence, added `Config.Event.Updated`
 
 **Key Features:**
+
 - Target file selection (project vs global scope)
 - Deep merge with existing config
 - Schema validation with Zod
@@ -73,13 +83,16 @@ INFO  service=config.invalidation scope=global directory=/tmp/theme-only-oMAT6r 
 ### Phase 3: Event Bus Integration
 
 **Files Created:**
+
 - `packages/opencode/src/config/invalidation.ts` - Subsystem invalidation handlers and event subscribers
 
 **Files Modified:**
+
 - `packages/opencode/src/project/bootstrap.ts` - Wired `ConfigInvalidation.setup()` into instance bootstrap
 - `packages/opencode/src/server/server.ts` - Updated PATCH `/config` route to use new persistence and publish events
 
 **Key Features:**
+
 - Config update events published via Bus
 - Targeted invalidation based on diff
 - Safety fallback to full dispose when feature flag disabled
@@ -88,15 +101,18 @@ INFO  service=config.invalidation scope=global directory=/tmp/theme-only-oMAT6r 
 ### Phase 4: State Registration
 
 **Files Modified:**
+
 - `packages/opencode/src/config/config.ts` - Converted config state to use `State.register()`
 
 **Key Features:**
+
 - Config state now supports targeted invalidation
 - Named registration allows string-based invalidation
 
 ## Feature Flags
 
 ### OPENCODE_CONFIG_HOT_RELOAD
+
 - **Type**: Boolean (`"true"` | `"false"`)
 - **Default**: `"false"` (feature disabled by default)
 - **Purpose**: Master switch for config hot reload feature
@@ -105,6 +121,7 @@ INFO  service=config.invalidation scope=global directory=/tmp/theme-only-oMAT6r 
   - `"true"`: Use new targeted invalidation system
 
 ### OPENCODE_FULL_DISPOSE_ON_CONFIG_UPDATE
+
 - **Type**: Boolean (`"true"` | `"false"`)
 - **Default**: `"false"`
 - **Purpose**: Safety escape hatch
@@ -113,6 +130,7 @@ INFO  service=config.invalidation scope=global directory=/tmp/theme-only-oMAT6r 
   - `"false"`: Use targeted invalidation when hot reload is enabled
 
 ### OPENCODE_CONFIG_INVALIDATION_LOG_DIFF
+
 - **Type**: Boolean (`"true"` | `"false"`)
 - **Default**: `"false"`
 - **Purpose**: Debug flag (not yet fully implemented)
@@ -155,17 +173,15 @@ curl -X PATCH http://localhost:4096/config?scope=global \
 ### Config.update()
 
 **Before:**
+
 ```typescript
 async function update(config: Info): Promise<void>
 ```
 
 **After:**
+
 ```typescript
-async function update(input: {
-  scope?: "project" | "global"
-  update: Info
-  directory?: string
-}): Promise<{
+async function update(input: { scope?: "project" | "global"; update: Info; directory?: string }): Promise<{
   before: Info
   after: Info
   diff: ConfigDiff
@@ -176,9 +192,11 @@ async function update(input: {
 ### PATCH /config
 
 **Query Parameters:**
+
 - `scope` (optional): `"project"` or `"global"`, defaults to `"project"`
 
 **Response:**
+
 - Returns merged config after applying updates
 - Publishes `config.updated` event via event bus
 
@@ -205,11 +223,13 @@ bun run --cwd packages/opencode typecheck
 According to the original plan, the following are not yet complete:
 
 ### Phase 4 (Partial): Convert All Subsystem States
+
 - Only config state has been converted to use `State.register()`
 - Provider, MCP, LSP, FileWatcher, Plugin, and other subsystems still need conversion
 - Current invalidation handlers exist but subsystems don't register with names yet
 
 ### Phase 5: Comprehensive Testing
+
 - Need tests for:
   - File locking concurrency
   - JSONC comment preservation
@@ -219,6 +239,7 @@ According to the original plan, the following are not yet complete:
   - Feature flag behaviors
 
 ### Additional Items from Plan
+
 - Optimistic concurrency control with version/etag
 - FileWatcher integration for external config changes
 - Well-known config caching
@@ -244,6 +265,7 @@ According to the original plan, the following are not yet complete:
 ## Error Handling
 
 All config operations have comprehensive error handling:
+
 - `ConfigUpdateError`: General update failures
 - `ConfigValidationError`: Schema validation failures with detailed field errors
 - `ConfigWriteConflictError`: Lock timeout errors

@@ -24,34 +24,38 @@ export namespace Format {
     })
   export type Status = z.infer<typeof Status>
 
-  const state = State.register("format", () => Instance.directory, async () => {
-    const enabled: Record<string, boolean> = {}
-    const cfg = await Config.get()
+  const state = State.register(
+    "format",
+    () => Instance.directory,
+    async () => {
+      const enabled: Record<string, boolean> = {}
+      const cfg = await Config.get()
 
-    const formatters: Record<string, Formatter.Info> = {}
-    for (const item of Object.values(Formatter)) {
-      formatters[item.name] = item
-    }
-    for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
-      if (item.disabled) {
-        delete formatters[name]
-        continue
+      const formatters: Record<string, Formatter.Info> = {}
+      for (const item of Object.values(Formatter)) {
+        formatters[item.name] = item
       }
-      const result: Formatter.Info = mergeDeep(formatters[name] ?? {}, {
-        command: [],
-        extensions: [],
-        ...item,
-      })
-      result.enabled = async () => true
-      result.name = name
-      formatters[name] = result
-    }
+      for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
+        if (item.disabled) {
+          delete formatters[name]
+          continue
+        }
+        const result: Formatter.Info = mergeDeep(formatters[name] ?? {}, {
+          command: [],
+          extensions: [],
+          ...item,
+        })
+        result.enabled = async () => true
+        result.name = name
+        formatters[name] = result
+      }
 
-    return {
-      enabled,
-      formatters,
-    }
-  })
+      return {
+        enabled,
+        formatters,
+      }
+    },
+  )
 
   async function isEnabled(item: Formatter.Info) {
     const s = await state()

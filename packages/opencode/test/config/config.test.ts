@@ -497,10 +497,7 @@ test("appends plugins discovered from directories after merging config files", a
       directory: workspace.path,
       fn: async () => {
         const config = await Config.get()
-        expect(config.plugin).toEqual([
-          "local-plugin",
-          `file://${path.join(globalTmp.path, "plugin", "custom.ts")}`,
-        ])
+        expect(config.plugin).toEqual(["local-plugin", `file://${path.join(globalTmp.path, "plugin", "custom.ts")}`])
       },
     })
   } finally {

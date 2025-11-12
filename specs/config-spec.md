@@ -24,10 +24,10 @@ Must satisfy the `Config.Info` schema (see `packages/opencode/src/config/config.
   "username": "new-name",
   "agent": {
     "build": {
-      "model": "anthropic/claude-3"
-    }
+      "model": "anthropic/claude-3",
+    },
   },
-  "share": "manual"
+  "share": "manual",
 }
 ```
 

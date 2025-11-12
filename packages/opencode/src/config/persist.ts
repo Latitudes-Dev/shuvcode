@@ -59,11 +59,7 @@ function normalizeConfig(config: Config.Info): Config.Info {
   }
 }
 
-export async function update(input: {
-  scope: "project" | "global"
-  update: Config.Info
-  directory: string
-}): Promise<{
+export async function update(input: { scope: "project" | "global"; update: Config.Info; directory: string }): Promise<{
   before: Config.Info
   after: Config.Info
   diff: ConfigDiff
@@ -126,8 +122,7 @@ export async function update(input: {
       const afterGlobal = input.scope === "global" ? await Config.global() : undefined
 
       const diff = computeDiff(before, after)
-      const diffForPublish =
-        input.scope === "global" ? computeDiff(beforeGlobal!, afterGlobal!) : diff
+      const diffForPublish = input.scope === "global" ? computeDiff(beforeGlobal!, afterGlobal!) : diff
 
       if (await Bun.file(backupPath).exists()) {
         await fs.unlink(backupPath)

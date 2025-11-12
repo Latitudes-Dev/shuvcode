@@ -857,11 +857,7 @@ export namespace Config {
     return state().then((x) => x.config)
   }
 
-  export async function update(input: {
-    scope?: "project" | "global"
-    update: Info
-    directory?: string
-  }): Promise<{
+  export async function update(input: { scope?: "project" | "global"; update: Info; directory?: string }): Promise<{
     before: Info
     after: Info
     diff: ConfigDiff
