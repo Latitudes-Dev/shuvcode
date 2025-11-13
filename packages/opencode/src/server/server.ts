@@ -81,14 +81,13 @@ export namespace Server {
   // Entries auto-expire after a short window.
   const LastConfigUpdate: Map<string, { scope: "project" | "global"; sections: string[]; at: number }> = new Map()
 
+  // Periodically clean up stale entries from LastConfigUpdate
+  setInterval(() => {
+    const now = Date.now()
+
   function rememberConfigUpdate(directory: string, scope: "project" | "global", sections: string[]) {
     LastConfigUpdate.set(directory, { scope, sections, at: Date.now() })
-    // best-effort cleanup of stale entries
-    for (const [key, value] of LastConfigUpdate) {
-      if (Date.now() - value.at > 60_000) LastConfigUpdate.delete(key)
-    }
   }
-
   export const Event = {
     Connected: Bus.event("server.connected", z.object({})),
   }
