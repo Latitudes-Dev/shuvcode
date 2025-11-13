@@ -175,13 +175,11 @@ export namespace ConfigInvalidation {
     }
     initialized = true
 
-    Bus.subscribe(Config.Event.Updated, async (event) => {
-      if (!isConfigHotReloadEnabled()) {
-        return
-      }
-
-      const { diff, scope, directory, refreshed } = event.properties as any
-      await apply({ diff, scope, directory, refreshed })
-    })
+    if (isConfigHotReloadEnabled()) {
+      Bus.subscribe(Config.Event.Updated, async (event) => {
+        const { diff, scope, directory, refreshed } = event.properties as any
+        await apply({ diff, scope, directory, refreshed })
+      })
+    }
   }
 }
