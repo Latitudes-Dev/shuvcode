@@ -4,7 +4,7 @@ import { mergeDeep } from "remeda"
 import { Config } from "./config"
 import { acquireLock } from "./lock"
 import { createBackup, restoreBackup } from "./backup"
-import { writeConfigFile } from "./write"
+import { writeConfigFile, writeFileAtomically } from "./write"
 import { computeDiff, type ConfigDiff } from "./diff"
 import { ConfigUpdateError, ConfigValidationError, ConfigWriteError } from "./error"
 import { Instance } from "@/project/instance"
@@ -84,21 +84,27 @@ export async function update(input: { scope: "project" | "global"; update: Confi
 
       const existingContent = await loadFileContent(filepath)
       const fileContent = existingContent ? parseJsonc(existingContent) : {}
+      const previousParsed = existingContent ? Config.Info.safeParse(fileContent) : undefined
+      const previousNormalized = previousParsed?.success ? normalizeConfig(previousParsed.data) : undefined
 
       const merged = mergeDeep(fileContent, input.update)
 
       const validated = Config.Info.parse(merged)
 
       const normalized = normalizeConfig(validated)
+      const writerDiff = previousNormalized ? computeDiff(previousNormalized, normalized) : undefined
 
-      await writeConfigFile(filepath, normalized, existingContent).catch((error) => {
+      await writeConfigFile(filepath, normalized, existingContent, {
+        diff: writerDiff,
+        previous: previousNormalized,
+      }).catch((error) => {
         log.error("JSONC write failed, attempting fallback", {
           filepath,
           error: String(error),
         })
 
         const content = JSON.stringify(normalized, null, 2) + "\n"
-        return Bun.write(filepath, content)
+        return writeFileAtomically(filepath, content)
       })
 
       const hotReloadEnabled = isConfigHotReloadEnabled()
@@ -172,6 +178,6 @@ export async function update(input: { scope: "project" | "global"; update: Confi
       )
     }
   } finally {
-    release()
+    await release()
   }
 }
