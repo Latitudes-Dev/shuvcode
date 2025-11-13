@@ -77,15 +77,18 @@ function errors(...codes: number[]) {
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+  const CONFIG_UPDATE_MEMORY_TTL_MS = 60_000
+
   // Remember last config update sections per directory to enrich subsequent TUI toasts.
   // Entries auto-expire after a short window.
   const LastConfigUpdate: Map<string, { scope: "project" | "global"; sections: string[]; at: number }> = new Map()
 
   function rememberConfigUpdate(directory: string, scope: "project" | "global", sections: string[]) {
-    LastConfigUpdate.set(directory, { scope, sections, at: Date.now() })
+    const now = Date.now()
+    LastConfigUpdate.set(directory, { scope, sections, at: now })
     // best-effort cleanup of stale entries
     for (const [key, value] of LastConfigUpdate) {
-      if (Date.now() - value.at > 60_000) LastConfigUpdate.delete(key)
+      if (now - value.at > CONFIG_UPDATE_MEMORY_TTL_MS) LastConfigUpdate.delete(key)
     }
   }
 
@@ -210,7 +213,12 @@ export namespace Server {
           // Remember sections for toast enrichment regardless of hot reload mode
           rememberConfigUpdate(directory, scope, sections)
 
-          if (hotReloadEnabled && scope === "project") {
+          if (!hotReloadEnabled) {
+            await Instance.dispose()
+            return c.json(result.after)
+          }
+
+          if (scope === "project") {
             await Bus.publish(Config.Event.Updated, {
               scope,
               directory,
@@ -220,7 +228,7 @@ export namespace Server {
               diff: publishDiff,
             })
           }
-          if (hotReloadEnabled && scope === "global") {
+          if (scope === "global") {
             const publishErrors = await Instance.forEach(async (dir) => {
               await Bus.publish(Config.Event.Updated, {
                 scope,
@@ -1705,7 +1713,8 @@ export namespace Server {
             if (match) {
               const scope = (match[1] as string).toLowerCase() as "global" | "project"
               const now = Date.now()
-              const isFresh = (ts: number) => now - ts < 10_000
+              const TOAST_FRESHNESS_WINDOW_MS = 10_000
+              const isFresh = (ts: number) => now - ts < TOAST_FRESHNESS_WINDOW_MS
 
               let candidate = LastConfigUpdate.get(directory)
               if (!candidate || !isFresh(candidate.at) || candidate.scope !== scope) {
@@ -1725,7 +1734,10 @@ export namespace Server {
                 }
               }
             }
-          } catch {}
+          } catch (error) {
+            // Toast enrichment is best-effort; log errors for debugging
+            log.debug("toast enrichment failed", { error })
+          }
           await Bus.publish(TuiEvent.ToastShow, payload)
           return c.json(true)
         },

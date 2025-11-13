@@ -18,6 +18,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { cleanupOldBackups } from "./backup"
 import { Bus } from "../bus"
 import type { ConfigDiff } from "./diff"
 import { pathToFileURL } from "url"
@@ -70,20 +71,6 @@ export namespace Config {
     } catch {
       return plugin
     }
-  }
-
-  export const Event = {
-    Updated: Bus.event(
-      "config.updated",
-      z.object({
-        scope: z.enum(["project", "global"]),
-        directory: z.string().optional(),
-        refreshed: z.boolean().optional(),
-        before: z.any(),
-        after: z.any(),
-        diff: z.any(),
-      }),
-    ),
   }
 
   async function loadStateFromDisk() {
@@ -182,10 +169,6 @@ export namespace Config {
       result.share = "auto"
     }
 
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
-    }
-
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
     return {
@@ -199,6 +182,31 @@ export namespace Config {
   export async function readFreshConfig() {
     const state = await loadStateFromDisk()
     return state.config
+  }
+
+  const PROJECT_CONFIG_CANDIDATES = [
+    [".opencode", "opencode.jsonc"],
+    [".opencode", "opencode.json"],
+    ["opencode.jsonc"],
+    ["opencode.json"],
+  ]
+
+  export async function cleanupBackups() {
+    const directory = Instance.directory
+    const localTargets = PROJECT_CONFIG_CANDIDATES.map((segments) => path.join(directory, ...segments))
+    const globalTarget = await resolveGlobalFile()
+    const targets = [...new Set([globalTarget, ...localTargets])]
+
+    await Promise.all(
+      targets.map(async (filepath) => {
+        await cleanupOldBackups(filepath).catch((error) => {
+          log.warn("config.backup.cleanupFailed", {
+            filepath,
+            error: String(error),
+          })
+        })
+      }),
+    )
   }
 
   const INVALID_DIRS = new Bun.Glob(`{${["agents", "commands", "plugins", "tools"].join(",")}}/`)
@@ -694,6 +702,20 @@ export namespace Config {
 
   export type Info = z.output<typeof Info>
 
+  export const Event = {
+    Updated: Bus.event(
+      "config.updated",
+      z.object({
+        scope: z.enum(["project", "global"]),
+        directory: z.string().optional(),
+        refreshed: z.boolean().optional(),
+        before: Info,
+        after: Info,
+        diff: z.custom<ConfigDiff>(),
+      }),
+    ),
+  }
+
   async function loadGlobalConfig(): Promise<Info> {
     const globalFile = await resolveGlobalFile()
 
@@ -857,6 +879,23 @@ export namespace Config {
     return state().then((x) => x.config)
   }
 
+  /**
+   * Persist an `Info` patch at the specified scope and expose the resulting diff payload.
+   *
+   * @param input.scope - `"project"` or `"global"` to select the target config, defaults to `"project"`.
+   * @param input.update - Partial `Info` to merge with the existing configuration.
+   * @param input.directory - Optional override for the directory that owns the project config.
+   * @returns An object describing the state before and after the merge plus the file that was written.
+   * @throws Config.JsonError when JSONC validation fails during parsing.
+   * @throws Config.InvalidError when the merged document violates `Info` schema expectations.
+   * @throws Config.ConfigDirectoryTypoError when the requested directory cannot be resolved cleanly.
+   *
+   * @example
+   * await Config.update({
+   *   scope: "project",
+   *   update: { theme: "dark" },
+   * })
+   */
   export async function update(input: { scope?: "project" | "global"; update: Info; directory?: string }): Promise<{
     before: Info
     after: Info

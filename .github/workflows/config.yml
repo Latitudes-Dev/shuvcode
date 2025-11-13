@@ -1,0 +1,31 @@
+name: config-changes
+
+on:
+  push:
+    paths:
+      - "packages/opencode/src/config/**"
+      - "packages/opencode/test/config/**"
+      - "docs/config-hot-reload.md"
+  pull_request:
+    paths:
+      - "packages/opencode/src/config/**"
+      - "packages/opencode/test/config/**"
+      - "docs/config-hot-reload.md"
+  workflow_dispatch:
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run config validations
+        env:
+          CI: true
+        run: |
+          bun test packages/opencode/test/config/*
+          bun run --cwd packages/opencode typecheck

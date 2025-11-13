@@ -6,8 +6,8 @@ import {
   type ParseError,
   printParseErrorCode,
 } from "jsonc-parser"
-import { Log } from "@/util/log"
 import type { Config } from "./config"
+import { Log } from "../util/log"
 
 const log = Log.create({ service: "config.write" })
 
@@ -26,10 +26,17 @@ export async function writeConfigFile(
   }
 
   if (isJsonc) {
-    const updated = applyIncrementalUpdates(existingContent, newConfig)
-    validateJsonc(updated)
-    await Bun.write(filepath, updated)
-    return
+    try {
+      const updated = applyIncrementalUpdates(existingContent, newConfig)
+      validateJsonc(updated)
+      await Bun.write(filepath, updated)
+      return
+    } catch (error) {
+      log.warn("JSONC incremental write failed, falling back to full rewrite", {
+        filepath,
+        error: String(error),
+      })
+    }
   }
 
   const content = JSON.stringify(newConfig, null, 2) + "\n"

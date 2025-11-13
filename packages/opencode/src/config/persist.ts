@@ -1,10 +1,9 @@
 import path from "path"
-import os from "os"
 import fs from "fs/promises"
 import { mergeDeep } from "remeda"
 import { Config } from "./config"
 import { acquireLock } from "./lock"
-import { createBackup, restoreBackup } from "./backup"
+import { createBackup, restoreBackup, cleanupOldBackups } from "./backup"
 import { writeConfigFile } from "./write"
 import { computeDiff, type ConfigDiff } from "./diff"
 import { ConfigUpdateError, ConfigValidationError, ConfigWriteError } from "./error"
@@ -59,6 +58,16 @@ function normalizeConfig(config: Config.Info): Config.Info {
   }
 }
 
+function safeStringify(value: unknown): string {
+  if (value === undefined) return "undefined"
+  try {
+    const serialized = JSON.stringify(value)
+    return serialized ?? "undefined"
+  } catch {
+    return "[Circular]"
+  }
+}
+
 export async function update(input: { scope: "project" | "global"; update: Config.Info; directory: string }): Promise<{
   before: Config.Info
   after: Config.Info
@@ -92,15 +101,7 @@ export async function update(input: { scope: "project" | "global"; update: Confi
 
       const normalized = normalizeConfig(validated)
 
-      await writeConfigFile(filepath, normalized, existingContent).catch((error) => {
-        log.error("JSONC write failed, attempting fallback", {
-          filepath,
-          error: String(error),
-        })
-
-        const content = JSON.stringify(normalized, null, 2) + "\n"
-        return Bun.write(filepath, content)
-      })
+      await writeConfigFile(filepath, normalized, existingContent)
 
       const hotReloadEnabled = isConfigHotReloadEnabled()
       if (hotReloadEnabled && input.scope === "global") {
@@ -127,6 +128,13 @@ export async function update(input: { scope: "project" | "global"; update: Confi
       if (await Bun.file(backupPath).exists()) {
         await fs.unlink(backupPath)
       }
+
+      await cleanupOldBackups(filepath).catch((error) => {
+        log.warn("config.update.cleanupFailed", {
+          filepath,
+          error: String(error),
+        })
+      })
 
       log.info("config.update.persisted", {
         scope: input.scope,
@@ -156,7 +164,7 @@ export async function update(input: { scope: "project" | "global"; update: Confi
           field: e.path.join("."),
           message: e.message,
           expected: "expected" in e ? String((e as any).expected) : undefined,
-          received: JSON.stringify("received" in e ? (e as any).received : undefined),
+          received: safeStringify("received" in e ? (e as any).received : undefined),
         }))
 
         throw new ConfigValidationError({ filepath, errors })
@@ -173,6 +181,6 @@ export async function update(input: { scope: "project" | "global"; update: Confi
       )
     }
   } finally {
-    release()
+    await release()
   }
 }

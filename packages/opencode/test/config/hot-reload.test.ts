@@ -3,6 +3,7 @@ import os from "os"
 import path from "path"
 import fs from "fs/promises"
 import { Config } from "../../src/config/config"
+import type { ConfigDiff } from "../../src/config/diff"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { Bus } from "../../src/bus"
@@ -86,6 +87,25 @@ async function cleanup(directories: string[]) {
   for (const dir of directories) {
     await fs.rm(dir, { recursive: true, force: true })
   }
+}
+
+async function recordInvalidations(directory: string, diff: ConfigDiff) {
+  const names: string[] = []
+  const originalInvalidate = Instance.invalidate
+  ;(Instance as any).invalidate = async (name: string) => {
+    names.push(name)
+    await originalInvalidate(name)
+  }
+  try {
+    await ConfigInvalidation.apply({
+      scope: "project",
+      directory,
+      diff,
+    })
+  } finally {
+    ;(Instance as any).invalidate = originalInvalidate
+  }
+  return names.filter((name) => name !== "config")
 }
 
 await Instance.disposeAll()
@@ -298,6 +318,67 @@ test("global fan-out surfaces aggregated publish errors", async () => {
     await cleanup([sender, target])
   }
 })
+
+const TARGETED_INVALIDATION_CASES: Array<{ name: string; diff: ConfigDiff; expected: string[] }> = [
+  {
+    name: "provider diff invalidates provider state",
+    diff: { provider: true },
+    expected: ["provider"],
+  },
+  {
+    name: "model diff invalidates provider state",
+    diff: { model: true },
+    expected: ["provider"],
+  },
+  {
+    name: "mcp diff invalidates mcp state",
+    diff: { mcp: true },
+    expected: ["mcp"],
+  },
+  {
+    name: "lsp diff invalidates lsp state",
+    diff: { lsp: true },
+    expected: ["lsp"],
+  },
+  {
+    name: "formatter diff invalidates lsp and format",
+    diff: { formatter: true },
+    expected: ["lsp", "format"],
+  },
+  {
+    name: "watcher diff invalidates filewatcher state",
+    diff: { watcher: true },
+    expected: ["filewatcher"],
+  },
+  {
+    name: "plugin diff invalidates plugin and tool registry",
+    diff: { plugin: true },
+    expected: ["plugin", "tool-registry"],
+  },
+  {
+    name: "tools diff invalidates tool registry",
+    diff: { tools: true },
+    expected: ["tool-registry"],
+  },
+]
+
+for (const spec of TARGETED_INVALIDATION_CASES) {
+  test(`targeted invalidation: ${spec.name}`, async () => {
+    process.env.OPENCODE_CONFIG_HOT_RELOAD = "true"
+    const slug = spec.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()
+    const directory = await createWorkspace(`targeted-${slug}-`)
+    try {
+      await withFreshGlobalPath(async () => {
+        await ensureInstance(directory)
+        const names = await recordInvalidations(directory, spec.diff)
+        expect(names).toEqual(spec.expected)
+      })
+    } finally {
+      delete process.env.OPENCODE_CONFIG_HOT_RELOAD
+      await cleanup([directory])
+    }
+  })
+}
 
 test("project updates remain scoped to the initiator", async () => {
   process.env.OPENCODE_CONFIG_HOT_RELOAD = "true"

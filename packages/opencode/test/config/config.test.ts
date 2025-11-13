@@ -504,3 +504,31 @@ test("appends plugins discovered from directories after merging config files", a
     ;(Global.Path as any).config = previousGlobalConfig
   }
 })
+
+// Documents current in-process locking; cross-process safety will be added with distributed locks.
+test("Config.update serializes concurrent writes in one process", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const firstUpdate = Config.update({
+        update: {
+          model: "first/run",
+        } as any,
+      })
+
+      const secondUpdate = Config.update({
+        update: {
+          theme: "dark",
+        } as any,
+      })
+
+      const [first, second] = await Promise.all([firstUpdate, secondUpdate])
+      expect(first.filepath).toBe(second.filepath)
+
+      const config = await Config.get()
+      expect(config.model).toBe("first/run")
+      expect(config.theme).toBe("dark")
+    },
+  })
+})

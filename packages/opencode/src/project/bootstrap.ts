@@ -11,6 +11,7 @@ import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util/log"
 import { ConfigInvalidation } from "../config/invalidation"
+import { Config } from "../config/config"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
@@ -21,6 +22,7 @@ export async function InstanceBootstrap() {
   await LSP.init()
   FileWatcher.init()
   File.init()
+  await Config.cleanupBackups()
 
   Bus.subscribe(Command.Event.Executed, async (payload) => {
     if (payload.properties.name === Command.Default.INIT) {

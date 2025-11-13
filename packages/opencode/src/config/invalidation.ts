@@ -7,6 +7,7 @@ import { Context } from "../util/context"
 import { isConfigHotReloadEnabled } from "./hot-reload"
 
 const log = Log.create({ service: "config.invalidation" })
+const shouldLogConfigDiff = process.env.OPENCODE_CONFIG_INVALIDATION_LOG_DIFF === "true"
 
 type ApplyInput = {
   scope: "project" | "global"
@@ -28,7 +29,7 @@ async function invalidateLSP(diff: ConfigDiff): Promise<void> {
   await Instance.invalidate("lsp")
 }
 
-async function invalidateFileWatcher(): Promise<void> {
+async function invalidateFileWatcher(_diff: ConfigDiff): Promise<void> {
   await Instance.invalidate("filewatcher")
 }
 
@@ -36,11 +37,11 @@ async function invalidatePlugin(diff: ConfigDiff): Promise<void> {
   await Instance.invalidate("plugin")
 }
 
-async function invalidateToolRegistry(): Promise<void> {
+async function invalidateToolRegistry(_diff: ConfigDiff): Promise<void> {
   await Instance.invalidate("tool-registry")
 }
 
-async function invalidatePermission(): Promise<void> {
+async function invalidatePermission(_diff: ConfigDiff): Promise<void> {
   await Instance.invalidate("permission")
 }
 
@@ -53,7 +54,78 @@ async function invalidateCommandAgentFormat(diff: ConfigDiff): Promise<void> {
 async function invalidateUIAndPrompts(diff: ConfigDiff): Promise<void> {
   if (diff.instructions) await Instance.invalidate("instructions")
   if (diff.theme) await Instance.invalidate("theme")
+  if (diff.share || diff.autoshare) await Instance.invalidate("share-settings")
 }
+
+type DiffKey = {
+  [K in keyof ConfigDiff]: ConfigDiff[K] extends boolean | undefined ? K : never
+}[keyof ConfigDiff]
+
+type TargetMatrixEntry = {
+  keys: DiffKey[]
+  targets: (diff: ConfigDiff) => string[]
+  invalidate: (diff: ConfigDiff) => Promise<void>
+}
+
+const TARGET_MATRIX: TargetMatrixEntry[] = [
+  {
+    keys: ["provider", "model", "small_model", "disabled_providers"],
+    targets: () => ["provider"],
+    invalidate: invalidateProvider,
+  },
+  {
+    keys: ["mcp"],
+    targets: () => ["mcp"],
+    invalidate: invalidateMCP,
+  },
+  {
+    keys: ["lsp", "formatter"],
+    targets: () => ["lsp"],
+    invalidate: invalidateLSP,
+  },
+  {
+    keys: ["watcher"],
+    targets: () => ["filewatcher"],
+    invalidate: invalidateFileWatcher,
+  },
+  {
+    keys: ["plugin"],
+    targets: () => ["plugin"],
+    invalidate: invalidatePlugin,
+  },
+  {
+    keys: ["plugin", "tools"],
+    targets: () => ["tool-registry"],
+    invalidate: invalidateToolRegistry,
+  },
+  {
+    keys: ["permission"],
+    targets: () => ["permission"],
+    invalidate: invalidatePermission,
+  },
+  {
+    keys: ["command", "agent", "formatter"],
+    targets: (diff) => {
+      const names: string[] = []
+      if (diff.command) names.push("command")
+      if (diff.agent) names.push("agent")
+      if (diff.formatter) names.push("format")
+      return names
+    },
+    invalidate: invalidateCommandAgentFormat,
+  },
+  {
+    keys: ["instructions", "theme", "share", "autoshare"],
+    targets: (diff) => {
+      const names: string[] = []
+      if (diff.instructions) names.push("instructions")
+      if (diff.theme) names.push("theme")
+      if (diff.share || diff.autoshare) names.push("share-settings")
+      return names
+    },
+    invalidate: invalidateUIAndPrompts,
+  },
+]
 
 async function applyInternal(input: ApplyInput) {
   const { diff, scope } = input
@@ -74,62 +146,26 @@ async function applyInternal(input: ApplyInput) {
         return
       }
 
-      const sections = Object.keys(diff).filter((k) => diff[k as keyof ConfigDiff] === true)
+      const sections = Object.keys(diff).filter((key) => diff[key as keyof ConfigDiff] === true)
       const targets = new Set<string>()
       const tasks: Promise<void>[] = []
-      const providerChanged = diff.provider || diff.model || diff.small_model || diff.disabled_providers
-      if (providerChanged) {
-        targets.add("provider")
-        tasks.push(invalidateProvider(diff))
+
+      if (shouldLogConfigDiff) {
+        log.debug("config.invalidate.diff", {
+          scope,
+          directory: directoryForLog,
+          diff,
+        })
       }
 
-      const mcpChanged = diff.mcp
-      if (mcpChanged) {
-        targets.add("mcp")
-        tasks.push(invalidateMCP(diff))
-      }
-
-      const lspChanged = diff.lsp || diff.formatter
-      if (lspChanged) {
-        targets.add("lsp")
-        tasks.push(invalidateLSP(diff))
-      }
-
-      const watcherChanged = diff.watcher
-      if (watcherChanged) {
-        targets.add("filewatcher")
-        tasks.push(invalidateFileWatcher())
-      }
-
-      const pluginChanged = diff.plugin
-      if (pluginChanged) {
-        targets.add("plugin")
-        tasks.push(invalidatePlugin(diff))
-        targets.add("tool-registry")
-        tasks.push(invalidateToolRegistry())
-      }
-
-      const permissionChanged = diff.permission
-      if (permissionChanged) {
-        targets.add("permission")
-        tasks.push(invalidatePermission())
-      }
-
-      const commandAgentFormatChanged = diff.command || diff.agent || diff.formatter
-      if (commandAgentFormatChanged) {
-        if (diff.command) targets.add("command")
-        if (diff.agent) targets.add("agent")
-        if (diff.formatter) targets.add("format")
-        tasks.push(invalidateCommandAgentFormat(diff))
-      }
-
-      const shareSettingsChanged = diff.share || diff.autoshare
-      const uiChanged = diff.theme || diff.instructions || shareSettingsChanged
-      if (uiChanged) {
-        if (diff.theme) targets.add("theme")
-        if (diff.instructions) targets.add("instructions")
-        if (shareSettingsChanged) targets.add("share-settings")
-        tasks.push(invalidateUIAndPrompts(diff))
+      for (const entry of TARGET_MATRIX) {
+        const matches = entry.keys.some((key) => diff[key as keyof ConfigDiff] === true)
+        if (!matches) continue
+        const names = entry.targets(diff)
+        for (const name of names) {
+          targets.add(name)
+        }
+        tasks.push(entry.invalidate(diff))
       }
 
       log.info("config.invalidate.start", {
@@ -157,6 +193,23 @@ async function applyInternal(input: ApplyInput) {
   })
 }
 export namespace ConfigInvalidation {
+  /**
+   * Dispatches the diff-controlled invalidation sweep for a config update.
+   *
+   * @param input.scope - Scope that was written (`"project"` or `"global"`).
+   * @param input.directory - Optional project directory that owns the update request.
+   * @param input.diff - Diff object produced by `Config.update`.
+   * @param input.refreshed - Set to `true` when the caller already refreshed config state.
+   * @throws Context.NotFound when the requested instance context has already disposed (warning logged).
+   * @throws Error for unexpected invalidation failures.
+   *
+   * @example
+   * await ConfigInvalidation.apply({
+   *   scope: "project",
+   *   directory: "/home/user/workspace",
+   *   diff: { provider: true, model: true },
+   * })
+   */
   export async function apply(input: ApplyInput) {
     try {
       await applyInternal(input)

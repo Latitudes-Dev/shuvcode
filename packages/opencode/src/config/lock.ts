@@ -1,44 +1,73 @@
 import path from "path"
 import { Log } from "@/util/log"
+import { existsSync } from "fs"
 
 const log = Log.create({ service: "config.lock" })
-const fileLocks = new Map<string, Promise<void>>()
+
+const DEFAULT_LOCK_TIMEOUT_MS = 30000
+const LOCK_WARNING_THRESHOLD_MS = 5000
+const LOCK_WARNING_WINDOW_MS = 100
+const STALE_LOCK_MS = 5000
 
 interface LockOptions {
   timeout?: number
 }
 
-export async function acquireLock(filepath: string, options?: LockOptions): Promise<() => void> {
+type UnlockFn = () => Promise<void>
+
+async function ensureFileExists(filepath: string) {
+  if (!existsSync(filepath)) {
+    const { writeFile } = await import("node:fs/promises")
+    await writeFile(filepath, "", { flag: "wx" }).catch(() => {})
+  }
+}
+
+export async function acquireLock(filepath: string, options?: LockOptions): Promise<UnlockFn> {
   const normalized = path.normalize(filepath)
-  const timeout = options?.timeout ?? 30000
+  const timeout = options?.timeout ?? DEFAULT_LOCK_TIMEOUT_MS
+
+  await ensureFileExists(normalized)
+
+  const { lock } = await import("proper-lockfile")
   const startTime = Date.now()
 
-  while (fileLocks.has(normalized)) {
+  try {
+    const release = await lock(normalized, {
+      stale: STALE_LOCK_MS,
+      update: STALE_LOCK_MS / 2,
+      retries: {
+        retries: Math.max(1, Math.floor(timeout / 200)),
+        minTimeout: 100,
+        maxTimeout: 2000,
+        factor: 2,
+      },
+    })
+    return release
+  } catch (error) {
     const waited = Date.now() - startTime
-
-    if (waited > 5000 && waited < 5100) {
-      log.warn("lock acquisition taking longer than expected", {
-        filepath: normalized,
-        waited,
-      })
-    }
-
-    if (waited > timeout) {
-      throw new Error(`Lock timeout: could not acquire lock for ${normalized} after ${waited}ms`)
-    }
-
-    await fileLocks.get(normalized)
+    throw new Error(`Lock timeout: could not acquire lock for ${normalized} after ${waited}ms`)
   }
+}
 
-  let releaseFn: () => void
-  const lockPromise = new Promise<void>((resolve) => {
-    releaseFn = resolve
-  })
+export async function cleanupStaleLocks(lockDir: string) {
+  const { readdir, stat, unlink } = await import("node:fs/promises")
+  const { join } = await import("path")
 
-  fileLocks.set(normalized, lockPromise)
+  try {
+    const entries = await readdir(lockDir, { withFileTypes: true })
+    const { check } = await import("proper-lockfile")
 
-  return () => {
-    fileLocks.delete(normalized)
-    releaseFn!()
-  }
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name.endsWith(".lock")) {
+        const lockPath = join(lockDir, entry.name)
+        try {
+          const isLocked = await check(lockPath).catch(() => false)
+          if (!isLocked) {
+            log.info("cleaning up stale lock directory", { lockPath })
+            await unlink(lockPath).catch(() => {})
+          }
+        } catch {}
+      }
+    }
+  } catch {}
 }

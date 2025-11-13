@@ -31,6 +31,12 @@ INFO  service=config.invalidation scope=global directory=/tmp/theme-only-oMAT6r 
 
 - That reduces invalidation fan-out from 4+ subsystems down to one, eliminating roughly 75% of the work for theme edits. The improvement is enforced by the updated test suite (`bun test packages/opencode/test/config/write.test.ts packages/opencode/test/config/hot-reload.test.ts`).
 
+### Backup Retention Cleanup
+
+- Added `cleanupOldBackups` in `packages/opencode/src/config/backup.ts`, which deletes `.bak-*` files older than a configurable TTL (default 7 days via `OPENCODE_CONFIG_BACKUP_TTL_DAYS`).
+- The cleanup routine runs during instance bootstrap and after every successful `Config.update`, ensuring disk usage stays bounded.
+- Logged deletion counts make it easy to monitor retention behavior; see `packages/opencode/test/config/backup.test.ts` for TTL enforcement coverage.
+
 ## What Was Implemented
 
 ### Phase 0: State System Enhancements
@@ -133,10 +139,15 @@ INFO  service=config.invalidation scope=global directory=/tmp/theme-only-oMAT6r 
 
 - **Type**: Boolean (`"true"` | `"false"`)
 - **Default**: `"false"`
-- **Purpose**: Debug flag (not yet fully implemented)
+- **Purpose**: Debug telemetry for targeted invalidation
 - **Behavior**:
-  - `"true"`: Log complete diff objects for troubleshooting
-  - `"false"`: Log only diff section names
+  - `"true"`: Emit `config.invalidate.diff` debug records with the full diff payload plus scope/directory so every config write can be correlated with its invalidation targets.
+  - `"false"`: Continue logging only section and target names through the existing `config.invalidate.start/complete` info lines.
+
+## Documentation
+
+- Authored `docs/config-hot-reload.md` to describe each feature flag, backup TTL, distributed locking strategy, and the `config.invalidate.diff` toggle so operators know how to interpret logs and adjust retention.
+- Updated `README.md` configuration guidance to cover automatic backup cleanup decisions, highlight the hot-reload feature, and link to the new document for deeper guidance.
 
 ## Usage
 
@@ -217,6 +228,11 @@ bun test test/config/hot-reload.test.ts
 ```bash
 bun run --cwd packages/opencode typecheck
 ```
+
+## CI
+
+- Added `.github/workflows/config.yml`, which runs on pushes or pull requests that touch `packages/opencode/src/config/**`, `packages/opencode/test/config/**`, or `docs/config-hot-reload.md`.
+- The workflow executes `bun test packages/opencode/test/config/*` and `bun run --cwd packages/opencode typecheck` so config changes receive the extra validation steps required before merging.
 
 ## What's Not Yet Implemented (Future Work)
 
