@@ -14,7 +14,7 @@ import { ConfigInvalidation } from "../config/invalidation"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
-  ConfigInvalidation.setup()
+  await ConfigInvalidation.setup()
   await Plugin.init()
   Share.init()
   Format.init()
