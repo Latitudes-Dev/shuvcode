@@ -114,7 +114,11 @@ function applyIncrementalUpdates(content: string, newConfig: Config.Info, option
   return currentContent
 }
 
-function buildUpdateInstructions(newConfig: Config.Info, previous: Config.Info, diff?: ConfigDiff): UpdateInstruction[] {
+function buildUpdateInstructions(
+  newConfig: Config.Info,
+  previous: Config.Info,
+  diff?: ConfigDiff,
+): UpdateInstruction[] {
   const updateKeys = new Set<string>()
   if (diff) {
     for (const [diffKey, configKeys] of Object.entries(diffKeyToConfigKey)) {
