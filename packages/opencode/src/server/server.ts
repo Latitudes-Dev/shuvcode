@@ -84,6 +84,12 @@ export namespace Server {
   // Periodically clean up stale entries from LastConfigUpdate
   setInterval(() => {
     const now = Date.now()
+    for (const [dir, entry] of LastConfigUpdate.entries()) {
+      if (now - entry.at > 60_000) {
+        LastConfigUpdate.delete(dir)
+      }
+    }
+  }, 60_000)
 
   function rememberConfigUpdate(directory: string, scope: "project" | "global", sections: string[]) {
     LastConfigUpdate.set(directory, { scope, sections, at: Date.now() })

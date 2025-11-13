@@ -90,17 +90,20 @@ export namespace State {
    * await State.invalidate("cache:*");
    */
   export async function invalidate(name: string, key?: string) {
-    if (!entries) {
-      const pattern = name.endsWith(":*") ? name.slice(0, -1) : null
-      if (pattern) {
-        const tasks: Promise<void>[] = []
-        for (const [registeredName] of namedRegistry) {
-          if (registeredName.startsWith(pattern)) {
-            tasks.push(invalidate(registeredName, key))
-          }
+    const pattern = name.endsWith(":*") ? name.slice(0, -1) : null
+    if (pattern) {
+      const tasks: Promise<void>[] = []
+      for (const [registeredName] of namedRegistry) {
+        if (registeredName.startsWith(pattern)) {
+          tasks.push(invalidate(registeredName, key))
         }
-        await Promise.all(tasks)
       }
+      await Promise.all(tasks)
+      return
+    }
+
+    const entries = namedRegistry.get(name)
+    if (!entries) {
       return
     }
 

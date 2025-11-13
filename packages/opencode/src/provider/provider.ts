@@ -297,11 +297,7 @@ export namespace Provider {
           const existing = parsed.models[modelID]
           const parsedModel: ModelsDev.Model = {
             id: modelID,
-            name:
-              model.name ??
-              (model.id && model.id !== modelID
-                ? modelID
-                : existing?.name ?? modelID),
+            name: model.name ?? (model.id && model.id !== modelID ? modelID : (existing?.name ?? modelID)),
             release_date: model.release_date ?? existing?.release_date,
             attachment: model.attachment ?? existing?.attachment ?? false,
             reasoning: model.reasoning ?? existing?.reasoning ?? false,
