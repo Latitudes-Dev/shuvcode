@@ -6,11 +6,7 @@ import {
   type ParseError,
   printParseErrorCode,
 } from "jsonc-parser"
-import { Log } from "@/util/log"
 import type { Config } from "./config"
-
-const log = Log.create({ service: "config.write" })
-
 export async function writeConfigFile(
   filepath: string,
   newConfig: Config.Info,
