@@ -28,6 +28,7 @@ export async function acquireLock(filepath: string, options?: LockOptions): Prom
     }
 
     await fileLocks.get(normalized)
+    await Bun.sleep(10)
   }
 
   let releaseFn: () => void
