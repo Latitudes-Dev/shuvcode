@@ -15,7 +15,7 @@ type ApplyInput = {
   refreshed?: boolean
 }
 
-let initialized = false
+let setupPromise: Promise<void> | undefined
 async function invalidateProvider(diff: ConfigDiff): Promise<void> {
   await Instance.invalidate("provider")
 }
@@ -169,17 +169,20 @@ export namespace ConfigInvalidation {
     }
   }
 
-  export function setup() {
-    if (initialized) {
-      return
+  export async function setup() {
+    if (setupPromise) {
+      return setupPromise
     }
-    initialized = true
 
-    if (isConfigHotReloadEnabled()) {
-      Bus.subscribe(Config.Event.Updated, async (event) => {
-        const { diff, scope, directory, refreshed } = event.properties as any
-        await apply({ diff, scope, directory, refreshed })
-      })
-    }
+    setupPromise = (async () => {
+      if (isConfigHotReloadEnabled()) {
+        Bus.subscribe(Config.Event.Updated, async (event) => {
+          const { diff, scope, directory, refreshed } = event.properties as any
+          await apply({ diff, scope, directory, refreshed })
+        })
+      }
+    })()
+
+    return setupPromise
   }
 }
