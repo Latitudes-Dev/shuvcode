@@ -75,6 +75,7 @@
     "minimatch": "10.0.3",
     "open": "10.1.2",
     "partial-json": "0.1.7",
+    "proper-lockfile": "4.1.2",
     "remeda": "catalog:",
     "solid-js": "catalog:",
     "strip-ansi": "7.1.2",

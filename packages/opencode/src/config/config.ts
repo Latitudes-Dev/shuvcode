@@ -7,35 +7,87 @@ import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
-import { lazy } from "../util/lazy"
+import { resolveGlobalFile } from "./global-file"
 import { NamedError } from "../util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { Instance } from "../project/instance"
+import { State } from "../project/state"
 import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { cleanupOldBackups } from "./backup"
+import { Bus } from "../bus"
+import type { ConfigDiff } from "./diff"
+import { pathToFileURL } from "url"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
+  const WINDOWS_RELATIVE_PREFIXES = [".\\", "..\\", "~\\"]
 
-  export const state = Instance.state(async () => {
-    const auth = await Auth.all()
-    let result = await global()
+  const isPathLikePluginSpecifier = (value: unknown): value is string => {
+    if (typeof value !== "string") return false
+    if (value.startsWith("file://")) return true
+    if (value.startsWith("./") || value.startsWith("../")) return true
+    if (value.startsWith("~/")) return true
+    if (WINDOWS_RELATIVE_PREFIXES.some((prefix) => value.startsWith(prefix))) {
+      return true
+    }
+    if (value.startsWith("/") || path.isAbsolute(value)) {
+      return true
+    }
+    return false
+  }
 
-    // Override with custom config if provided
-    if (Flag.OPENCODE_CONFIG) {
-      result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
-      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+  const resolvePluginFileReference = (plugin: string, configFilepath: string): string => {
+    if (plugin.startsWith("file://")) {
+      return plugin
     }
 
+    const normalizeWindowsPath = (input: string) => input.replace(/\\/g, "/")
+
+    if (plugin.startsWith("~/")) {
+      const homePath = path.join(os.homedir(), plugin.slice(2))
+      return pathToFileURL(homePath).href
+    }
+
+    if (WINDOWS_RELATIVE_PREFIXES.some((prefix) => plugin.startsWith(prefix))) {
+      const withoutPrefix = plugin.startsWith("~\\")
+        ? path.join(os.homedir(), plugin.slice(2))
+        : path.resolve(path.dirname(configFilepath), plugin)
+      return pathToFileURL(withoutPrefix).href
+    }
+
+    if (path.isAbsolute(plugin)) {
+      return pathToFileURL(plugin).href
+    }
+
+    try {
+      const base = pathToFileURL(configFilepath).href
+      const resolved = new URL(plugin, base).href
+      return normalizeWindowsPath(resolved)
+    } catch {
+      return plugin
+    }
+  }
+
+  async function loadStateFromDisk() {
+    const directory = Instance.directory
+    const worktree = Instance.worktree
+    const auth = await Auth.all()
+    let result = await global()
     for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+      const found = await Filesystem.findUp(file, directory, worktree)
       for (const resolved of found.toReversed()) {
         result = mergeDeep(result, await loadFile(resolved))
       }
+    }
+
+    if (Flag.OPENCODE_CONFIG) {
+      result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
+      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
     if (Flag.OPENCODE_CONFIG_CONTENT) {
@@ -60,8 +112,8 @@ export namespace Config {
       ...(await Array.fromAsync(
         Filesystem.up({
           targets: [".opencode"],
-          start: Instance.directory,
-          stop: Instance.worktree,
+          start: directory,
+          stop: worktree,
         }),
       )),
     ]
@@ -72,14 +124,13 @@ export namespace Config {
     }
 
     const promises: Promise<void>[] = []
+    const pluginFiles: string[] = []
     for (const dir of directories) {
       await assertValid(dir)
 
-      if (dir.endsWith(".opencode")) {
+      if (dir !== Global.Path.config) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
-          log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeDeep(result, await loadFile(path.join(dir, file)))
-          // to satisy the type checker
           result.agent ??= {}
           result.mode ??= {}
           result.plugin ??= []
@@ -90,11 +141,15 @@ export namespace Config {
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
-      result.plugin.push(...(await loadPlugin(dir)))
+      pluginFiles.push(...(await loadPlugin(dir)))
     }
     await Promise.allSettled(promises)
 
-    // Migrate deprecated mode field to agent field
+    if (!result.plugin) {
+      result.plugin = []
+    }
+    result.plugin.push(...pluginFiles)
+
     for (const [name, mode] of Object.entries(result.mode)) {
       result.agent = mergeDeep(result.agent ?? {}, {
         [name]: {
@@ -110,12 +165,6 @@ export namespace Config {
 
     if (!result.username) result.username = os.userInfo().username
 
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
-    }
-
-    // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
     }
@@ -126,7 +175,39 @@ export namespace Config {
       config: result,
       directories,
     }
-  })
+  }
+
+  export const state = State.register("config", () => Instance.directory, loadStateFromDisk)
+
+  export async function readFreshConfig() {
+    const state = await loadStateFromDisk()
+    return state.config
+  }
+
+  const PROJECT_CONFIG_CANDIDATES = [
+    [".opencode", "opencode.jsonc"],
+    [".opencode", "opencode.json"],
+    ["opencode.jsonc"],
+    ["opencode.json"],
+  ]
+
+  export async function cleanupBackups() {
+    const directory = Instance.directory
+    const localTargets = PROJECT_CONFIG_CANDIDATES.map((segments) => path.join(directory, ...segments))
+    const globalTarget = await resolveGlobalFile()
+    const targets = [...new Set([globalTarget, ...localTargets])]
+
+    await Promise.all(
+      targets.map(async (filepath) => {
+        await cleanupOldBackups(filepath).catch((error) => {
+          log.warn("config.backup.cleanupFailed", {
+            filepath,
+            error: String(error),
+          })
+        })
+      }),
+    )
+  }
 
   const INVALID_DIRS = new Bun.Glob(`{${["agents", "commands", "plugins", "tools"].join(",")}}/`)
   async function assertValid(dir: string) {
@@ -626,12 +707,28 @@ export namespace Config {
 
   export type Info = z.output<typeof Info>
 
-  export const global = lazy(async () => {
+  export const Event = {
+    Updated: Bus.event(
+      "config.updated",
+      z.object({
+        scope: z.enum(["project", "global"]),
+        directory: z.string().optional(),
+        refreshed: z.boolean().optional(),
+        before: Info,
+        after: Info,
+        diff: z.custom<ConfigDiff>(),
+      }),
+    ),
+  }
+
+  async function loadGlobalConfig(): Promise<Info> {
+    const globalFile = await resolveGlobalFile()
+
     let result: Info = pipe(
       {},
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+      mergeDeep(await loadFile(globalFile)),
     )
 
     await import(path.join(Global.Path.config, "config"), {
@@ -650,7 +747,11 @@ export namespace Config {
       .catch(() => {})
 
     return result
-  })
+  }
+
+  export async function global() {
+    return loadGlobalConfig()
+  }
 
   async function loadFile(filepath: string): Promise<Info> {
     log.info("loading", { path: filepath })
@@ -737,12 +838,12 @@ export namespace Config {
         await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2))
       }
       const data = parsed.data
-      if (data.plugin) {
+      if (data.plugin?.length) {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
-          try {
-            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          if (isPathLikePluginSpecifier(plugin)) {
+            data.plugin[i] = resolvePluginFileReference(plugin, configFilepath)
+          }
         }
       }
       return data
@@ -783,11 +884,39 @@ export namespace Config {
     return state().then((x) => x.config)
   }
 
-  export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
-    const existing = await loadFile(filepath)
-    await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
-    await Instance.dispose()
+  /**
+   * Persist an `Info` patch at the specified scope and expose the resulting diff payload.
+   *
+   * @param input.scope - `"project"` or `"global"` to select the target config, defaults to `"project"`.
+   * @param input.update - Partial `Info` to merge with the existing configuration.
+   * @param input.directory - Optional override for the directory that owns the project config.
+   * @returns An object describing the state before and after the merge plus the file that was written.
+   * @throws Config.JsonError when JSONC validation fails during parsing.
+   * @throws Config.InvalidError when the merged document violates `Info` schema expectations.
+   * @throws Config.ConfigDirectoryTypoError when the requested directory cannot be resolved cleanly.
+   *
+   * @example
+   * await Config.update({
+   *   scope: "project",
+   *   update: { theme: "dark" },
+   * })
+   */
+  export async function update(input: { scope?: "project" | "global"; update: Info; directory?: string }): Promise<{
+    before: Info
+    after: Info
+    diff: ConfigDiff
+    diffForPublish: ConfigDiff
+    filepath: string
+  }> {
+    const scope = input.scope ?? "project"
+    const directory = input.directory ?? Instance.directory
+
+    const { update: persistUpdate } = await import("./persist")
+    return persistUpdate({
+      scope,
+      update: input.update,
+      directory,
+    })
   }
 
   export async function directories() {
