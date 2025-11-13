@@ -1,5 +1,4 @@
 import path from "path"
-import os from "os"
 import fs from "fs/promises"
 import { mergeDeep } from "remeda"
 import { Config } from "./config"
