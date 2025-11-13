@@ -66,8 +66,30 @@ export namespace State {
     return wrappedGetter
   }
 
+  /**
+   * Invalidates (disposes and removes) state entries registered under the given name.
+   *
+   * If the `name` ends with `:*`, it is treated as a wildcard pattern and all registered names
+   * that start with the given prefix (before the `:*`) will be invalidated.
+   *
+   * If a `key` is provided, only entries matching both the name and key will be invalidated.
+   * If `key` is omitted, all entries for the given name (or matching names, if using a wildcard) will be invalidated.
+   *
+   * @param {string} name - The registered name of the state to invalidate. Supports wildcard patterns (e.g., "foo:*").
+   * @param {string} [key] - Optional key to further filter which state entries to invalidate.
+   * @returns {Promise<void>} Resolves when all matching state entries have been invalidated.
+   *
+   * @example
+   * // Invalidate all state entries registered under "user"
+   * await State.invalidate("user");
+   *
+   * // Invalidate only the state entry for "user" with a specific key
+   * await State.invalidate("user", "user:123");
+   *
+   * // Invalidate all state entries for all names starting with "cache:"
+   * await State.invalidate("cache:*");
+   */
   export async function invalidate(name: string, key?: string) {
-    const entries = namedRegistry.get(name)
     if (!entries) {
       const pattern = name.endsWith(":*") ? name.slice(0, -1) : null
       if (pattern) {
