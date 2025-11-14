@@ -99,20 +99,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })()
 
     const model = (() => {
-      const [store, setStore] = createStore<{
-        model: Record<string, ModelKey>
-        recent: ModelKey[]
-        favorites: ModelKey[]
-      }>({
-        model: {},
-        recent: [],
-        favorites: [],
-      })
+        const [store, setStore] = createStore<{
+          model: Record<string, ModelKey>
+          recent: ModelKey[]
+          favorites: ModelKey[]
+        }>({
+          model: {},
+          recent: [],
+          favorites: [],
+        })
 
-      const value = localStorage.getItem("model")
-      const favoritesValue = localStorage.getItem("model-favorites")
-      setStore("recent", JSON.parse(value ?? "[]"))
-      setStore("favorites", JSON.parse(favoritesValue ?? "[]"))
+        const parseList = (input: string | null) => {
+          if (!input) return []
+          try {
+            const parsed = JSON.parse(input)
+            if (Array.isArray(parsed)) return parsed
+          } catch {}
+          return []
+        }
+
+        const value = localStorage.getItem("model")
+        const favoritesValue = localStorage.getItem("model-favorites")
+        setStore("recent", parseList(value))
+        setStore("favorites", parseList(favoritesValue))
       createEffect(() => {
         localStorage.setItem("model", JSON.stringify(store.recent))
         localStorage.setItem("model-favorites", JSON.stringify(store.favorites))
@@ -182,6 +191,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       const toggleFavorite = (model: ModelKey) => {
+        if (!isModelValid(model)) return
         const exists = store.favorites.some((x) => x.providerID === model.providerID && x.modelID === model.modelID)
         if (exists) {
           setStore("favorites", (x) =>
