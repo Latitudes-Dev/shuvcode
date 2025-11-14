@@ -102,15 +102,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [store, setStore] = createStore<{
         model: Record<string, ModelKey>
         recent: ModelKey[]
+        favorites: ModelKey[]
       }>({
         model: {},
         recent: [],
+        favorites: [],
       })
 
       const value = localStorage.getItem("model")
+      const favoritesValue = localStorage.getItem("model-favorites")
       setStore("recent", JSON.parse(value ?? "[]"))
+      setStore("favorites", JSON.parse(favoritesValue ?? "[]"))
       createEffect(() => {
         localStorage.setItem("model", JSON.stringify(store.recent))
+        localStorage.setItem("model-favorites", JSON.stringify(store.favorites))
       })
 
       const list = createMemo(() =>
@@ -153,6 +158,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const recent = createMemo(() => store.recent.map(find).filter(Boolean))
+      const favorite = createMemo(() => store.favorites.map(find).filter(Boolean))
 
       const cycle = (direction: 1 | -1) => {
         const recentList = recent()
@@ -175,9 +181,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
       }
 
+      const toggleFavorite = (model: ModelKey) => {
+        const exists = store.favorites.some((x) => x.providerID === model.providerID && x.modelID === model.modelID)
+        if (exists) {
+          setStore("favorites", (x) =>
+            x.filter((f) => !(f.providerID === model.providerID && f.modelID === model.modelID)),
+          )
+        } else {
+          setStore("favorites", (x) => [...x, model])
+        }
+      }
+
       return {
         current: currentModel,
         recent,
+        favorite,
         list,
         cycle,
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
@@ -190,6 +208,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
           })
         },
+        toggleFavorite,
       }
     })()
 

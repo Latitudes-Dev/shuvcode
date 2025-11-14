@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/desktop",
   "version": "1.0.65",
-  "description": "",
+  "description": "OpenCode desktop application",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
