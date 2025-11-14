@@ -223,6 +223,33 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!val) return
           setModelStore("model", agent.current().name, { ...val })
         },
+        cycleFavorite(direction: 1 | -1) {
+          const favorites = modelStore.favorite.filter((item) => isModelValid(item))
+          if (!favorites.length) {
+            toast.show({
+              variant: "info",
+              message: "Add a favorite model to use this shortcut",
+              duration: 3000,
+            })
+            return
+          }
+          const current = currentModel()
+          let index = favorites.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
+          if (index === -1) {
+            index = direction === 1 ? 0 : favorites.length - 1
+          } else {
+            index += direction
+            if (index < 0) index = favorites.length - 1
+            if (index >= favorites.length) index = 0
+          }
+          const next = favorites[index]
+          if (!next) return
+          setModelStore("model", agent.current().name, { ...next })
+          const uniq = uniqueBy([next, ...modelStore.recent], (x) => x.providerID + x.modelID)
+          if (uniq.length > 5) uniq.pop()
+          setModelStore("recent", uniq)
+          save()
+        },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
             if (!isModelValid(model)) {
