@@ -99,29 +99,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })()
 
     const model = (() => {
-        const [store, setStore] = createStore<{
-          model: Record<string, ModelKey>
-          recent: ModelKey[]
-          favorites: ModelKey[]
-        }>({
-          model: {},
-          recent: [],
-          favorites: [],
-        })
+      const [store, setStore] = createStore<{
+        model: Record<string, ModelKey>
+        recent: ModelKey[]
+        favorites: ModelKey[]
+      }>({
+        model: {},
+        recent: [],
+        favorites: [],
+      })
 
-        const parseList = (input: string | null) => {
-          if (!input) return []
-          try {
-            const parsed = JSON.parse(input)
-            if (Array.isArray(parsed)) return parsed
-          } catch {}
-          return []
-        }
+      const parseList = (input: string | null) => {
+        if (!input) return []
+        try {
+          const parsed = JSON.parse(input)
+          if (Array.isArray(parsed)) return parsed
+        } catch {}
+        return []
+      }
 
-        const value = localStorage.getItem("model")
-        const favoritesValue = localStorage.getItem("model-favorites")
-        setStore("recent", parseList(value))
-        setStore("favorites", parseList(favoritesValue))
+      const value = localStorage.getItem("model")
+      const favoritesValue = localStorage.getItem("model-favorites")
+      setStore("recent", parseList(value))
+      setStore("favorites", parseList(favoritesValue))
       createEffect(() => {
         localStorage.setItem("model", JSON.stringify(store.recent))
         localStorage.setItem("model-favorites", JSON.stringify(store.favorites))
