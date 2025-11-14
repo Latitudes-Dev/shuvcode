@@ -112,18 +112,34 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           providerID: string
           modelID: string
         }[]
+        favorite: {
+          providerID: string
+          modelID: string
+        }[]
       }>({
         ready: false,
         model: {},
         recent: [],
+        favorite: [],
       })
 
       const file = Bun.file(path.join(Global.Path.state, "model.json"))
 
+      function save() {
+        Bun.write(
+          file,
+          JSON.stringify({
+            recent: modelStore.recent,
+            favorite: modelStore.favorite,
+          }),
+        )
+      }
+
       file
         .json()
         .then((x) => {
-          setModelStore("recent", x.recent)
+          if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
+          if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
         })
         .catch(() => {})
         .finally(() => {
@@ -182,6 +198,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         recent() {
           return modelStore.recent
         },
+        favorite() {
+          return modelStore.favorite
+        },
         parsed: createMemo(() => {
           const value = currentModel()
           const provider = sync.data.provider.find((x) => x.id === value.providerID)!
@@ -219,13 +238,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
               if (uniq.length > 5) uniq.pop()
               setModelStore("recent", uniq)
-              Bun.write(
-                file,
-                JSON.stringify({
-                  recent: modelStore.recent,
-                }),
-              )
+              save()
             }
+          })
+        },
+        toggleFavorite(model: { providerID: string; modelID: string }) {
+          batch(() => {
+            if (!isModelValid(model)) {
+              toast.show({
+                message: `Model ${model.providerID}/${model.modelID} is not valid`,
+                variant: "warning",
+                duration: 3000,
+              })
+              return
+            }
+            const exists = modelStore.favorite.some(
+              (x) => x.providerID === model.providerID && x.modelID === model.modelID,
+            )
+            const next = exists
+              ? modelStore.favorite.filter((x) => x.providerID !== model.providerID || x.modelID !== model.modelID)
+              : [model, ...modelStore.favorite]
+            setModelStore("favorite", next)
+            save()
           })
         },
       }
