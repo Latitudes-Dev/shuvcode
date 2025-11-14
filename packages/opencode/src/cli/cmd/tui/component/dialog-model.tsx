@@ -23,9 +23,24 @@ export function DialogModel() {
     const query = ref()?.filter
     const favorites = local.model.favorite()
     const recents = local.model.recent()
+    const currentModel = local.model.current()
+
+    const orderedRecents = currentModel
+      ? [
+          currentModel,
+          ...recents.filter(
+            (item) => item.providerID !== currentModel.providerID || item.modelID !== currentModel.modelID,
+          ),
+        ]
+      : recents
+
+    const favoriteList = favorites.filter(
+      (item) =>
+        !orderedRecents.some((recent) => recent.providerID === item.providerID && recent.modelID === item.modelID),
+    )
 
     const favoriteOptions = !query
-      ? favorites.flatMap((item) => {
+      ? favoriteList.flatMap((item) => {
           const provider = sync.data.provider.find((x) => x.id === item.providerID)
           if (!provider) return []
           const model = provider.models[item.modelID]
@@ -37,8 +52,8 @@ export function DialogModel() {
                 providerID: provider.id,
                 modelID: model.id,
               },
-              title: `★ ${model.name ?? item.modelID}`,
-              description: provider.name,
+              title: `${model.name ?? item.modelID}`,
+              description: `${provider.name} ★`,
               category: "Favorites",
               footer: model.cost?.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
             },
@@ -46,16 +61,13 @@ export function DialogModel() {
         })
       : []
 
-    const recentWithoutFavorites = recents.filter(
-      (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
-    )
-
     const recentOptions = !query
-      ? recentWithoutFavorites.flatMap((item) => {
+      ? orderedRecents.flatMap((item) => {
           const provider = sync.data.provider.find((x) => x.id === item.providerID)
           if (!provider) return []
           const model = provider.models[item.modelID]
           if (!model) return []
+          const favorite = favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID)
           return [
             {
               key: item,
@@ -63,8 +75,8 @@ export function DialogModel() {
                 providerID: provider.id,
                 modelID: model.id,
               },
-              title: model.name ?? item.modelID,
-              description: provider.name,
+              title: `${model.name ?? item.modelID}`,
+              description: `${provider.name}${favorite ? " ★" : ""}`,
               category: "Recent",
               footer: model.cost?.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
             },
@@ -73,8 +85,8 @@ export function DialogModel() {
       : []
 
     return [
-      ...favoriteOptions,
       ...recentOptions,
+      ...favoriteOptions,
       ...pipe(
         sync.data.provider,
         sortBy(
@@ -95,8 +107,8 @@ export function DialogModel() {
               )
               return {
                 value,
-                title: `${favorite ? "★ " : ""}${info.name ?? model}`,
-                description: provider.name,
+                title: `${info.name ?? model}`,
+                description: `${provider.name}${favorite ? " ★" : ""}`,
                 category: provider.name,
                 footer: info.cost?.input === 0 && provider.id === "opencode" ? <Free /> : undefined,
               }
@@ -107,7 +119,7 @@ export function DialogModel() {
               const inFavorites = favorites.some(
                 (item) => item.providerID === value.providerID && item.modelID === value.modelID,
               )
-              const inRecents = recents.some(
+              const inRecents = orderedRecents.some(
                 (item) => item.providerID === value.providerID && item.modelID === value.modelID,
               )
               if (inFavorites) return false
