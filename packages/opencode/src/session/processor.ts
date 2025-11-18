@@ -328,13 +328,18 @@ export namespace SessionProcessor {
               for (const msg of input.messages) {
                 for (const part of msg.parts) {
                   if (part.type === "file" && part.mime.startsWith("image/")) {
-                    const replacement = {
-                      ...part,
-                      type: "text" as const,
+                    const replacement: MessageV2.TextPart = {
+                      id: part.id,
+                      sessionID: part.sessionID,
+                      messageID: part.messageID,
+                      type: "text",
                       text: `[Image ${part.filename || "attachment"} removed because the model does not support it]`,
                     }
                     await Session.updatePart(replacement)
-                    Object.assign(part, replacement)
+                    const index = msg.parts.indexOf(part)
+                    if (index !== -1) {
+                      msg.parts[index] = replacement
+                    }
                     fixed = true
                   }
                   if (
