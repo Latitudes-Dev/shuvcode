@@ -126,6 +126,7 @@ export namespace SessionCompaction {
       providerID: input.model.providerID,
       model: model.info,
       abort: input.abort,
+      messages: input.messages,
     })
     const result = await processor.process(() =>
       streamText({

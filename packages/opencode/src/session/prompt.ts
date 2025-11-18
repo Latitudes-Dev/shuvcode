@@ -446,6 +446,7 @@ export namespace SessionPrompt {
         model: model.info,
         providerID: model.providerID,
         abort,
+        messages: msgs,
       })
       const system = await resolveSystemPrompt({
         providerID: model.providerID,
