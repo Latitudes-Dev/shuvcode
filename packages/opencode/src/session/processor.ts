@@ -323,56 +323,6 @@ export namespace SessionProcessor {
             log.error("process", {
               error: e,
             })
-            const supportsImages = input.model.modalities?.input?.includes("image") ?? false
-            if (e instanceof APICallError && e.statusCode === 400 && !supportsImages) {
-              let fixed = false
-              for (const msg of input.messages) {
-                for (const part of msg.parts) {
-                  if (part.type === "file" && part.mime.startsWith("image/")) {
-                    const replacement: MessageV2.TextPart = {
-                      id: part.id,
-                      sessionID: part.sessionID,
-                      messageID: part.messageID,
-                      type: "text",
-                      text: `[Image ${part.filename || "attachment"} removed because the model does not support it]`,
-                    }
-                    await Session.updatePart(replacement)
-                    const index = msg.parts.indexOf(part)
-                    if (index !== -1) {
-                      msg.parts[index] = replacement
-                    }
-                    fixed = true
-                  }
-                  if (
-                    part.type === "tool" &&
-                    part.state.status === "completed" &&
-                    part.state.attachments?.some((a) => a.mime.startsWith("image/"))
-                  ) {
-                    const newAttachments = part.state.attachments.filter((a) => !a.mime.startsWith("image/"))
-                    const removedCount = part.state.attachments.length - newAttachments.length
-                    if (removedCount > 0) {
-                      const newState = {
-                        ...part.state,
-                        attachments: newAttachments,
-                        output:
-                          part.state.output +
-                          `\n\n[${removedCount} image(s) removed from tool output because the model does not support them]`,
-                      }
-                      await Session.updatePart({
-                        ...part,
-                        state: newState,
-                      })
-                      part.state = newState
-                      fixed = true
-                    }
-                  }
-                }
-              }
-              if (fixed) {
-                log.info("retrying after fixing images")
-                continue
-              }
-            }
             const error = MessageV2.fromError(e, { providerID: input.providerID })
             if (error?.name === "APIError" && error.data.isRetryable) {
               attempt++
