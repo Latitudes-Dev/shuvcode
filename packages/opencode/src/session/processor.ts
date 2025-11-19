@@ -323,7 +323,8 @@ export namespace SessionProcessor {
             log.error("process", {
               error: e,
             })
-            if (e instanceof APICallError && e.statusCode === 400) {
+            const supportsImages = input.model.modalities?.input?.includes("image") ?? false
+            if (e instanceof APICallError && e.statusCode === 400 && !supportsImages) {
               let fixed = false
               for (const msg of input.messages) {
                 for (const part of msg.parts) {
