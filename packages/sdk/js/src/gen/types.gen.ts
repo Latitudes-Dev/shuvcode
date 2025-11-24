@@ -70,6 +70,8 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
+  sentEstimate?: number
+  contextEstimate?: number
 }
 
 export type ProviderAuthError = {
