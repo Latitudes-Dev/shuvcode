@@ -142,6 +142,10 @@ export type AssistantMessage = {
       write: number
     }
   }
+  outputEstimate?: number
+  reasoningEstimate?: number
+  contextEstimate?: number
+  sentEstimate?: number
   finish?: string
 }
 
