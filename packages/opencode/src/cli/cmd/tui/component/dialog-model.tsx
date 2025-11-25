@@ -4,8 +4,20 @@ import { useSync } from "@tui/context/sync"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
+import { useTheme } from "../context/theme"
+import { Keybind } from "@/util/keybind"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { Keybind } from "@/util/keybind"
+
+interface ModelValue {
+  providerID: string
+  modelID: string
+}
+
+function Free() {
+  const { theme } = useTheme()
+  return <span style={{ fg: theme.secondary }}>Free</span>
+}
 
 export function DialogModel() {
   const local = useLocal()
@@ -59,6 +71,7 @@ export function DialogModel() {
             if (!provider) return []
             const model = provider.models[item.modelID]
             if (!model) return []
+            const favorite = favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID)
             return [
               {
                 key: item,
@@ -213,6 +226,10 @@ export function DialogModel() {
       title="Select model"
       current={local.model.current()}
       options={options()}
+      onSelect={(option) => {
+        dialog.clear()
+        local.model.set(option.value as ModelValue, { recent: true })
+      }}
     />
   )
 }

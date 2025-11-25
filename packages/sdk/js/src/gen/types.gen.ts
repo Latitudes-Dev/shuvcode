@@ -14,6 +14,18 @@ export type EventInstallationUpdateAvailable = {
   }
 }
 
+export type EventConfigUpdated = {
+  type: "config.updated"
+  properties: {
+    scope: "project" | "global"
+    directory?: string
+    refreshed?: boolean
+    before: unknown
+    after: unknown
+    diff: unknown
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -58,6 +70,8 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
+  sentEstimate?: number
+  contextEstimate?: number
 }
 
 export type ProviderAuthError = {
@@ -130,6 +144,10 @@ export type AssistantMessage = {
       write: number
     }
   }
+  outputEstimate?: number
+  reasoningEstimate?: number
+  contextEstimate?: number
+  sentEstimate?: number
   finish?: string
 }
 
@@ -650,6 +668,7 @@ export type EventFileWatcherUpdated = {
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+  | EventConfigUpdated
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessageUpdated
