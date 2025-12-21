@@ -2105,6 +2105,8 @@ export type ProjectCreateData = {
   body?: {
     path: string
     name?: string
+    repo?: string
+    degit?: boolean
   }
   path?: never
   query?: {
