@@ -267,12 +267,16 @@ export namespace Project {
       if (!isGitRepo) {
         // Initialize git and create empty initial commit (required for project ID which is the first commit hash)
         await $`git init`.cwd(projectPath).quiet()
-        await $`git commit --allow-empty -m "Initial commit"`.cwd(projectPath).quiet()
+        await $`git -c user.name=${Flag.OPENCODE_GIT_USER_NAME} -c user.email=${Flag.OPENCODE_GIT_USER_EMAIL} commit --allow-empty -m "Initial commit"`
+          .cwd(projectPath)
+          .quiet()
       } else {
         // Check if there are any commits
         const hasCommits = await $`git rev-list -n 1 --all`.cwd(projectPath).quiet().nothrow().text()
         if (!hasCommits.trim()) {
-          await $`git commit --allow-empty -m "Initial commit"`.cwd(projectPath).quiet()
+          await $`git -c user.name=${Flag.OPENCODE_GIT_USER_NAME} -c user.email=${Flag.OPENCODE_GIT_USER_EMAIL} commit --allow-empty -m "Initial commit"`
+            .cwd(projectPath)
+            .quiet()
         }
       }
 
