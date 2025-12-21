@@ -18,6 +18,7 @@ import { Script } from "@opencode-ai/script"
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const staticFlag = process.argv.includes("--static")
 
 const allTargets: {
   os: string
@@ -168,6 +169,15 @@ for (const item of targets) {
     ),
   )
   binaries[name] = Script.version
+}
+
+// Build static directory for Docker/server deployments
+if (staticFlag) {
+  console.log("building static assets...")
+  const desktopDir = path.resolve(dir, "../desktop")
+  await $`bun run build`.cwd(desktopDir)
+  await $`cp -r ${desktopDir}/dist ${dir}/static`
+  console.log("static assets built to ./static")
 }
 
 export { binaries }
