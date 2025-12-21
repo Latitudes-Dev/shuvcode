@@ -144,6 +144,7 @@ for (const item of targets) {
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_BASE_VERSION: `'${Script.baseVersion}'`,
+      OPENCODE_COMMIT_HASH: `'${Script.commitHash}'`,
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
@@ -175,7 +176,7 @@ for (const item of targets) {
 if (staticFlag) {
   console.log("building static assets...")
   const desktopDir = path.resolve(dir, "../desktop")
-  await $`bun run build`.cwd(desktopDir)
+  await $`OPENCODE_COMMIT_HASH=${Script.commitHash} bun run build`.cwd(desktopDir)
   await $`cp -r ${desktopDir}/dist ${dir}/static`
   console.log("static assets built to ./static")
 }
