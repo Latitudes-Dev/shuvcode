@@ -1,8 +1,8 @@
 # Build stage for static assets
 FROM oven/bun:latest AS static-builder
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-ARG OPENCODE_COMMIT_HASH
-ENV OPENCODE_COMMIT_HASH=${OPENCODE_COMMIT_HASH}
+COPY .git .git
 COPY package.json bun.lock ./
 COPY patches patches
 COPY packages/desktop packages/desktop
@@ -14,7 +14,7 @@ COPY packages/slack packages/slack
 COPY packages/script packages/script
 COPY packages/opencode/src/cli/cmd/tui/context/theme packages/opencode/src/cli/cmd/tui/context/theme
 RUN bun install --ignore-scripts
-RUN cd packages/desktop && bun run build
+RUN cd packages/desktop && OPENCODE_COMMIT_HASH=$(git rev-parse --short HEAD) bun run build
 
 FROM alpine AS base
 
