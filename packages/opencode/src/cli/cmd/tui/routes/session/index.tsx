@@ -67,6 +67,7 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { Filesystem } from "@/util/filesystem"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { normalizePathFromDirectory } from "@tui/util/paths"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1880,12 +1881,8 @@ ToolRegistry.register<typeof TodoWriteTool>({
 })
 
 function normalizePath(input?: string) {
-  if (!input) return ""
-  if (path.isAbsolute(input)) {
-    const directory = use().sync.data.path.directory || process.cwd()
-    return path.relative(directory, input) || "."
-  }
-  return input
+  const directory = use().sync.data.path.directory || process.cwd()
+  return normalizePathFromDirectory(input, directory)
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {
