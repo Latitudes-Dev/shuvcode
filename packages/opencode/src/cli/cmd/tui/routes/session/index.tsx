@@ -870,7 +870,7 @@ export function Session() {
           }
 
           // Save to file in current working directory
-          const exportDir = process.cwd()
+          const exportDir = sync.data.path.directory || process.cwd()
           const filename = customFilename.trim()
           const filepath = path.join(exportDir, filename)
 
@@ -1882,7 +1882,8 @@ ToolRegistry.register<typeof TodoWriteTool>({
 function normalizePath(input?: string) {
   if (!input) return ""
   if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
+    const directory = use().sync.data.path.directory || process.cwd()
+    return path.relative(directory, input) || "."
   }
   return input
 }

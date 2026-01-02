@@ -284,7 +284,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     createEffect(() => {
-      getCustomThemes()
+      const directory = sync.data.path.directory || process.cwd()
+      getCustomThemes(directory)
         .then((custom) => {
           setStore(
             produce((draft) => {
@@ -299,7 +300,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           if (store.active !== "system") {
             setStore("ready", true)
           }
-        })
+      })
     })
 
     const renderer = useRenderer()
@@ -370,13 +371,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 })
 
 const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
-async function getCustomThemes() {
+async function getCustomThemes(startDir?: string) {
   const directories = [
     Global.Path.config,
     ...(await Array.fromAsync(
       Filesystem.up({
         targets: [".opencode"],
-        start: process.cwd(),
+        start: startDir || process.cwd(),
       }),
     )),
   ]
