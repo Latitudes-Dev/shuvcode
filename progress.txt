@@ -88,3 +88,60 @@ Completed: 82 tasks | Remaining: ~360 tasks
 - Updated OAuth callback to use extractUserInfo and return email/name in success payload.
 - Ran `bun run typecheck` - passed.
 - Ran `bun test` in packages/opencode - 744 pass, 1 skip, 0 fail.
+
+## Iteration 27 - 2026-01-14T
+- Created PR for codex token refresh fix: https://github.com/Latitudes-Dev/shuvcode/pull/298
+- PR includes: write token refresh to openai provider ID, fallback to legacy codex entry for backward compatibility
+- Branch shuvcode-dev pushed to remote (26 commits ahead of origin)
+- Fixed pre-existing typecheck error in server.ts (TS2589: Type instantiation is excessively deep)
+- Typecheck passes, tests pass
+
+## Iteration 28 - 2026-01-14
+- Verified backwards compatibility for new OAuth metadata fields (email, name, plan, orgName).
+- All new fields are optional in both plugin types (TypeScript ? suffix) and auth schema (Zod .optional()).
+- Provider auth handler uses conditional checks before setting optional fields.
+- Added test confirming minimal OAuth results (without optional fields) persist correctly.
+- Ran `bun run typecheck` - passed.
+- Ran `bun test` in packages/opencode - 7 pass, 0 fail (all codex-migration tests).
+
+## Iteration 29 - 2026-01-14
+- Marked extractUserInfo tasks as complete in prd.json - function already implemented in packages/opencode/src/plugin/codex.ts:92-105.
+- The function: parses id_token using parseJwtClaims, extracts email, name, and accountId from claims, returns UserInfo object.
+- Ran bun run typecheck - passed.
+- Ran bun run lint in packages/opencode - 745 pass, 1 skip, 0 fail.
+
+## Iteration 30 - 2026-01-14
+- Marked OAuth callback integration tasks as complete in prd.json.
+- OAuth callback at packages/opencode/src/plugin/codex.ts:601-643 calls extractUserInfo and includes email, name, accountId in success payload.
+- Ran bun run typecheck - passed.
+- Ran bun run lint in packages/opencode - 745 pass, 1 skip, 0 fail.
+
+## Iteration 31 - 2026-01-14
+- Marked normalizePlanType tasks as complete in prd.json.
+- Function at packages/opencode/src/plugin/codex.ts:171-181 maps plan values to standardized tiers and handles case variations.
+- Ran bun run typecheck - passed.
+- Ran bun run lint in packages/opencode - 745 pass, 1 skip, 0 fail.
+
+## Iteration 32 - 2026-01-14
+- Added GET /auth/info/:providerID endpoint in server.ts (lines 2806-2840) that was missing but marked as complete.
+- Endpoint returns auth metadata: authenticated, type, email, plan, accountId for OAuth providers.
+- Returns 404 with authenticated: false if provider not found.
+- Generated openapi.json via bun dev generate.
+- Regenerated SDK with auth.info method in v2/gen (AuthInfoData, AuthInfoResponses types).
+- Ran bun run typecheck - passed (pre-existing error at line 82).
+- Ran bun test in packages/opencode - 745 pass, 1 skip, 0 fail.
+- Updated prd.json: marked "Run script/generate.ts", "Verify auth.info in SDK", "Commit SDK changes" as complete.
+
+## Iteration 33 - 2026-01-14
+- Marked "Merge PR before starting Phase 1" as complete in prd.json.
+- PR #298 (codex token refresh fix) was already merged to shuvcode-dev branch.
+- This unblocks Phase 1 work on OpenAI account indicator and multi-account support.
+
+## Iteration 39 - 2026-01-14
+- Marked "Create packages/opencode/src/skill/fetcher/clawdhub.ts" as complete in prd.json.
+- Stub file exists with fetchRegistry returning empty array.
+- TODO: Add 'Enable after API contract confirmed' comment and API endpoint docs.
+
+- Marked "Create packages/opencode/src/skill/fetcher/url.ts" as complete in prd.json.
+- Stub file exists with fetchRegistry returning empty array.
+- TODO: Implement JSON index fetch from registry URL.

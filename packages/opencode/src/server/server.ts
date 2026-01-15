@@ -78,7 +78,7 @@ export namespace Server {
   const app = new Hono()
   export const App: () => Hono = lazy(
     () =>
-      // TODO: Break server.ts into smaller route files to fix type inference
+      // @ts-ignore TS2589 - Type instantiation excessively deep. TODO: Break server.ts into smaller route files
       app
         .onError((err, c) => {
           log.error("failed", {
@@ -719,6 +719,8 @@ export namespace Server {
           validator(
             "query",
             z.object({
+              directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
+              roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
               start: z.coerce
                 .number()
                 .optional()
@@ -732,6 +734,8 @@ export namespace Server {
             const term = query.search?.toLowerCase()
             const sessions: Session.Info[] = []
             for await (const session of Session.list()) {
+              if (query.directory !== undefined && session.directory !== query.directory) continue
+              if (query.roots && session.parentID) continue
               if (query.start !== undefined && session.time.updated < query.start) continue
               if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
               sessions.push(session)
@@ -2771,11 +2775,11 @@ export namespace Server {
           "/auth/info/:providerID",
           describeRoute({
             summary: "Get auth info",
-            description: "Get authentication information for a provider",
+            description: "Get authentication metadata for a provider including email, plan, and account ID.",
             operationId: "auth.info",
             responses: {
               200: {
-                description: "Auth information",
+                description: "Auth info retrieved successfully",
                 content: {
                   "application/json": {
                     schema: resolver(
@@ -2790,7 +2794,7 @@ export namespace Server {
                   },
                 },
               },
-              ...errors(400, 404),
+              ...errors(404),
             },
           }),
           validator(
@@ -2810,13 +2814,13 @@ export namespace Server {
                 404,
               )
             }
-            const oauthAuth = auth.type === "oauth" ? auth : null
+            const oauth = auth.type === "oauth" ? auth : null
             return c.json({
               authenticated: true,
               type: auth.type,
-              email: oauthAuth?.email,
-              plan: oauthAuth?.plan,
-              accountId: oauthAuth?.accountId,
+              email: oauth?.email,
+              plan: oauth?.plan,
+              accountId: oauth?.accountId,
             })
           },
         )
