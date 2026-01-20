@@ -57,16 +57,20 @@ export function Sidebar(props: { sessionID: string; width: number; overlay?: boo
       .sort(([a], [b]) => a.localeCompare(b))
   )
 
+  // Collect all Task tool parts with subagent_type, deduplicated by part ID
   const taskToolParts = createMemo(() => {
-    const parts: ToolPart[] = []
+    const partsMap = new Map<string, ToolPart>()
     for (const message of messages()) {
       for (const part of sync.data.part[message.id] ?? []) {
-        if (part.type === "tool" && part.state.input?.subagent_type) parts.push(part)
+        if (part.type === "tool" && part.state.input?.subagent_type) {
+          partsMap.set(part.id, part)
+        }
       }
     }
-    return parts
+    return Array.from(partsMap.values())
   })
 
+  // Group parts by agent type for organized display
   const subagentGroups = createMemo(() => {
     const groups = new Map<string, ToolPart[]>()
     for (const part of taskToolParts()) {
@@ -186,10 +190,18 @@ export function Sidebar(props: { sessionID: string; width: number; overlay?: boo
                           </box>
                           <For each={parts}>
                             {(part) => {
-                              const isActive = () => part.state.status === "running" || part.state.status === "pending"
-                              const isError = () => part.state.status === "error"
+                              const status = () => part.state.status
+                              const isActive = () => status() === "running" || status() === "pending"
                               const input = part.state.input as Record<string, unknown>
                               const description = (input?.description as string) ?? ""
+
+                              // Memoize the indicator to avoid reactivity issues
+                              const indicator = createMemo(() => {
+                                if (status() === "running" || status() === "pending") {
+                                  return getSpinnerFrame()
+                                }
+                                return status() === "error" ? "✗" : "✓"
+                              })
 
                               // Get subagent session ID from metadata, not part.sessionID (which is the parent)
                               const metadata =
@@ -219,7 +231,7 @@ export function Sidebar(props: { sessionID: string; width: number; overlay?: boo
                                   }}
                                 >
                                   <text flexShrink={0} fg={isActive() ? theme.success : theme.textMuted}>
-                                    {isActive() ? getSpinnerFrame() : isError() ? "✗" : "✓"}
+                                    {indicator()}
                                   </text>
                                   <text fg={isActive() ? theme.text : theme.textMuted} wrapMode="word">
                                     {description}
