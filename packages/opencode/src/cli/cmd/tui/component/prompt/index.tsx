@@ -531,6 +531,17 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete?.visible) return
     if (!store.prompt.input) return
+    const cursorOffset = input.cursorOffset
+    const before = cursorOffset > 0 ? input.plainText[cursorOffset - 1] : ""
+    if (sync.data.config.experimental?.backslash_newline !== false && before === "\\") {
+      input.cursorOffset = cursorOffset - 1
+      const start = input.logicalCursor
+      input.cursorOffset = cursorOffset
+      const end = input.logicalCursor
+      input.deleteRange(start.row, start.col, end.row, end.col)
+      input.insertText("\n")
+      return
+    }
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
@@ -902,6 +913,7 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                 }
+
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
                   if (

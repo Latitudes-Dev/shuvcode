@@ -1937,6 +1937,10 @@ export type Config = {
   experimental?: {
     disable_paste_summary?: boolean
     /**
+     * Enable backslash+enter to insert newline instead of submitting (default: true)
+     */
+    backslash_newline?: boolean
+    /**
      * Enable the batch tool
      */
     batch_tool?: boolean

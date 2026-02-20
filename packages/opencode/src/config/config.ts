@@ -1203,6 +1203,10 @@ export namespace Config {
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
+          backslash_newline: z
+            .boolean()
+            .optional()
+            .describe("Enable backslash+enter to insert newline instead of submitting (default: true)"),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
           openTelemetry: z
             .boolean()
